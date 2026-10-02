@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Figtree:wght@400;500;600;700;800&display=swap">
-<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mqtt@5.10.1/dist/mqtt.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
 /* Layout: one file, two roles. Host = big-screen game master view with a side rail; player = one-thumb phone view. */
@@ -968,7 +968,9 @@ const CATS = {
        ["Which explorer is Carl's childhood hero in Up?","Charles Muntz","Edgar Sterling","Arthur Fremont","Henry Pettigrew"]]}
 };
 const DIFF = {e:{label:"Easy", base:100}, m:{label:"Medium", base:200}, h:{label:"Hard", base:300}};
-const PREFIX = "lastcall-live-v1-";
+// Messages travel through a public MQTT broker over secure websockets, so any phone on any network can reach the host.
+const TOPIC = "lastcall-live/v2/";
+const BROKERS = ["wss://broker.emqx.io:8084/mqtt", "wss://broker.hivemq.com:8884/mqtt"];
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ";
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -981,13 +983,13 @@ const store = {
   del(k){ try{ localStorage.removeItem(k); }catch(e){} }
 };
 const ordinal = n => n + (["th","st","nd","rd"][(n % 100 - 20) % 10] || ["th","st","nd","rd"][n % 100] || "th");
-const hasPeer = typeof Peer !== "undefined";
+const hasNet = typeof mqtt !== "undefined";
 
 let role = null;      // null | "host" | "player"
 let H = null;         // host state (saved)
 let P = null;         // player state
-let peer = null;
-const conns = new Map();   // host: pid -> connection
+let net = null;         // MQTT client
+let beatId = null;
 let tickId = null;
 let confirmEnd = false;
 let homeErr = "";
@@ -1058,6 +1060,31 @@ function isMatch(typed, answer, wrongs){
 // Questions that only make sense with the options on screen are skipped in typed mode
 const typeable = ([q, a]) => !/which of these|which of the following/i.test(q) && a.length <= 30 && a.split(/\s+/).length <= 4;
 
+/* =================== TRANSPORT =================== */
+function connectBroker(i, onConnect, onFail, opts){
+  const c = mqtt.connect(BROKERS[i], {connectTimeout:8000, reconnectPeriod:2000, keepalive:20, clean:true, ...(opts || {})});
+  let ok = false;
+  const t = setTimeout(() => { if (!ok){ try{ c.end(true); }catch(e){} onFail(); } }, 9000);
+  c.once("connect", () => { ok = true; clearTimeout(t); onConnect(c); });
+  return c;
+}
+const pub = (topic, obj, retain) => { try{ if (net) net.publish(topic, obj == null ? "" : JSON.stringify(obj), {qos:1, retain:!!retain}); }catch(e){} };
+const parse = b => { try{ return JSON.parse(b.toString()); }catch(e){ return null; } };
+function dropNet(){ if (net){ try{ net.end(true); }catch(e){} net = null; } }
+function startBeat(){
+  if (beatId) clearInterval(beatId);
+  beatId = setInterval(() => {
+    if (role === "host" && H){
+      let changed = false;
+      for (const p of Object.values(H.players)) if (p.online && Date.now() - (p.lastSeen || 0) > 16000){ p.online = false; changed = true; }
+      if (changed){ broadcast(); render(); }
+    } else if (role === "player" && P && net && net.connected){
+      if (P.ever) pub(TOPIC + P.code + "/up", {t:"ping", pid:P.pid, name:P.name});
+      else if (P.hostOnline) sendJoin();
+    }
+  }, 5000);
+}
+
 /* =================== HOST =================== */
 const defaultSettings = () => ({cats:Object.keys(CATS), diff:"mixed", count:15, timer:30, drinks:true, mode:"typed"});
 const saveHost = () => store.set("lastcall-live-host", H);
@@ -1071,49 +1098,49 @@ function hostCreate(resume){
   }
   H.status = "connecting";
   Object.values(H.players).forEach(p => p.online = false);
-  openHostPeer(resume ? 6 : 0);
+  openHostNet(0);
   render();
 }
 
-function openHostPeer(retries){
-  if (peer) peer.destroy();
-  peer = new Peer(PREFIX + H.code);
-  peer.on("open", () => { H.status = "online"; saveHost(); render(); });
-  peer.on("connection", conn => {
-    conn.on("data", msg => hostOnMsg(conn, msg));
-    conn.on("close", () => { if (conn.pid && conns.get(conn.pid) === conn){ conns.delete(conn.pid); if (H.players[conn.pid]) H.players[conn.pid].online = false; render(); } });
-  });
-  peer.on("disconnected", () => { if (!peer.destroyed) peer.reconnect(); });
-  peer.on("error", err => {
-    if (err.type === "unavailable-id"){
-      if (retries > 0){ H.status = "connecting"; render(); setTimeout(() => openHostPeer(retries - 1), 3000); }
-      else if (H.phase === "lobby" && !Object.keys(H.players).length){ H.code = Array.from({length:4}, () => rand(CODE_CHARS)).join(""); openHostPeer(0); }
-      else { H.status = "error"; H.error = "That room code is still in use. Wait a minute and press Resume again."; render(); }
-    } else if (["network","server-error","socket-error","socket-closed","browser-incompatible"].includes(err.type)){
-      H.status = "error"; H.error = err.type === "browser-incompatible" ? "This browser can't host. Try Chrome, Edge or Safari." : "Can't reach the game server. Check the internet connection, then press Retry."; render();
-    }
-  });
+function openHostNet(i){
+  dropNet();
+  const base = TOPIC + H.code;
+  connectBroker(i, client => {
+    if (role !== "host"){ client.end(true); return; }
+    net = client; H.broker = i; H.status = "online";
+    const announce = () => { client.subscribe(base + "/up", {qos:1}); pub(base + "/host", {online:true}, true); };
+    announce();
+    client.on("connect", () => { H.status = "online"; announce(); render(); });
+    client.on("offline", () => { H.status = "connecting"; render(); });
+    client.on("message", (topic, buf) => { if (topic === base + "/up"){ const m = parse(buf); if (m) hostOnMsg(m); } });
+    saveHost(); render(); startBeat();
+  }, () => {
+    if (i + 1 < BROKERS.length) openHostNet(i + 1);
+    else { H.status = "error"; H.error = "Can't reach the game server. Check the internet connection, then press Retry."; render(); }
+  }, {will:{topic:base + "/host", payload:JSON.stringify({online:false}), qos:1, retain:true}});
 }
 
-function hostOnMsg(conn, msg){
+function hostOnMsg(msg){
   if (!msg || typeof msg !== "object") return;
-  if (msg.t === "join"){
-    const pid = String(msg.pid || "").slice(0, 20) || uid();
+  const pid = String(msg.pid || "").slice(0, 20);
+  if (!pid) return;
+  if (msg.t === "leave"){ const p = H.players[pid]; if (p && p.online){ p.online = false; broadcast(); render(); } return; }
+  if (msg.t === "join" || msg.t === "ping"){
     let name = String(msg.name || "").trim().slice(0, 16) || "Player";
     let p = H.players[pid];
+    const wasOnline = !!(p && p.online);
     if (!p){
       if (H.phase !== "lobby" && Object.keys(H.players).length >= 40) return;
       const taken = new Set(Object.values(H.players).map(x => x.name.toLowerCase()));
       let n = name, i = 2; while (taken.has(n.toLowerCase())) n = `${name} ${i++}`;
       p = H.players[pid] = {name:n, score:0, joinedAt:Date.now()};
     }
-    p.online = true;
-    const old = conns.get(pid); if (old && old !== conn) old.close();
-    conn.pid = pid; conns.set(pid, conn);
-    saveHost(); broadcast(); render();
+    p.online = true; p.lastSeen = Date.now();
+    if (msg.t === "join" || !wasOnline){ saveHost(); broadcast(); render(); }
+    return;
   }
-  if (msg.t === "answer" && conn.pid && H.players[conn.pid]){
-    const pid = conn.pid;
+  if (msg.t === "answer" && H.players[pid]){
+    H.players[pid].lastSeen = Date.now();
     if (H.phase !== "question" || msg.qn !== H.qn || H.answers[pid]) return;
     if (H.qEndsAt && Date.now() > H.qEndsAt + 750) return;
     if (H.mode === "typed"){
@@ -1149,8 +1176,8 @@ function viewFor(pid){
   if (H.phase === "final") v.top = ranking().slice(0, 5).map(x => ({name:x.name, score:x.score}));
   return v;
 }
-function sendView(pid){ const c = conns.get(pid); if (c && c.open) try{ c.send(viewFor(pid)); }catch(e){} }
-function broadcast(){ conns.forEach((_, pid) => sendView(pid)); }
+function sendView(pid){ if (H.players[pid]) pub(TOPIC + H.code + "/down/" + pid, viewFor(pid)); }
+function broadcast(){ for (const [pid, p] of Object.entries(H.players)) if (p.online) sendView(pid); }
 
 function split(n){ const e = Math.round(n/3), h = Math.round(n/3); return [...Array(e).fill("e"), ...Array(n-e-h).fill("m"), ...Array(h).fill("h")]; }
 function buildDeck(){
@@ -1244,55 +1271,67 @@ function playerJoin(code, name){
   const pid = saved && saved.code === code ? saved.pid : uid();
   store.set("lastcall-live-player", {code, name, pid});
   role = "player";
-  P = {code, name, pid, status:"connecting", view:null, conn:null, ever:false, deadline:0};
-  if (peer) peer.destroy();
-  peer = new Peer();
-  peer.on("open", playerConnect);
-  peer.on("disconnected", () => { if (!peer.destroyed) peer.reconnect(); });
-  peer.on("error", err => {
-    if (err.type === "peer-unavailable"){
-      if (P.ever){ P.status = "lost"; render(); setTimeout(playerConnect, 3000); }
-      else { P.status = "notfound"; render(); }
-    } else if (["network","server-error","socket-error","socket-closed"].includes(err.type)){
-      P.status = "lost"; render(); setTimeout(() => { if (peer && peer.disconnected && !peer.destroyed) peer.reconnect(); }, 3000);
-    } else if (err.type === "browser-incompatible"){ P.status = "error"; render(); }
-  });
+  P = {code, name, pid, status:"connecting", view:null, ever:false, deadline:0, hostOnline:null};
+  playerNet(0);
   render();
 }
-function playerConnect(){
-  if (role !== "player" || !peer || peer.destroyed) return;
-  if (peer.disconnected){ peer.reconnect(); setTimeout(playerConnect, 2000); return; }
-  const conn = peer.connect(PREFIX + P.code, {reliable:true});
-  P.conn = conn;
-  conn.on("open", () => { P.status = "connected"; P.ever = true; conn.send({t:"join", pid:P.pid, name:P.name}); render(); });
-  conn.on("data", msg => {
-    if (!msg || msg.t !== "view") return;
-    const prev = P.view; P.view = msg;
-    if (msg.phase === "question" && msg.remaining != null) P.deadline = Date.now() + msg.remaining;
-    if (msg.phase === "question" && msg.remaining != null && !(prev && prev.phase === "question" && prev.qn === msg.qn && prev.my === msg.my)) startTick();
-    render();
-  });
-  conn.on("close", () => { if (P.conn !== conn || role !== "player") return; P.status = "lost"; render(); setTimeout(playerConnect, 2500); });
+function playerNet(i){
+  dropNet();
+  const base = TOPIC + P.code;
+  connectBroker(i, client => {
+    if (role !== "player"){ client.end(true); return; }
+    net = client;
+    const subscribe = () => client.subscribe([base + "/host", base + "/down/" + P.pid], {qos:1});
+    client.on("message", (topic, buf) => {
+      const m = parse(buf);
+      if (topic === base + "/host"){
+        if (m && m.online){ const was = P.hostOnline; P.hostOnline = true; if (!P.ever) sendJoin(); else if (!was) render(); }
+        else { P.hostOnline = false; if (P.ever) render(); }
+      } else if (m && m.t === "view") onView(m);
+    });
+    client.on("connect", () => { subscribe(); if (P.ever){ P.status = "connected"; sendJoin(); render(); } });
+    client.on("offline", () => { if (P.ever){ P.status = "lost"; render(); } });
+    subscribe(); startBeat();
+    // the host keeps a "room is open" flag on the broker; no flag after a few seconds means no such room here
+    setTimeout(() => {
+      if (role !== "player" || net !== client || P.ever || P.hostOnline) return;
+      P.status = "notfound"; render();
+    }, 5000);
+  }, () => {
+    if (role !== "player") return;
+    if (i + 1 < BROKERS.length) playerNet(i + 1); else { P.status = "error"; render(); }
+  }, {will:{topic:base + "/up", payload:JSON.stringify({t:"leave", pid:P.pid}), qos:1, retain:false}});
+}
+function sendJoin(){ pub(TOPIC + P.code + "/up", {t:"join", pid:P.pid, name:P.name}); }
+function onView(msg){
+  const prev = P.view; P.view = msg; P.ever = true; P.status = "connected"; P.hostOnline = true;
+  if (msg.phase === "question" && msg.remaining != null) P.deadline = Date.now() + msg.remaining;
+  if (msg.phase === "question" && msg.remaining != null && !(prev && prev.phase === "question" && prev.qn === msg.qn && prev.my === msg.my)) startTick();
+  render();
 }
 function playerAnswer(i){
   const v = P.view;
-  if (!v || v.phase !== "question" || v.my != null || !P.conn?.open) return;
+  if (!v || v.phase !== "question" || v.my != null || !net || !net.connected) return;
   v.my = i;
-  try{ P.conn.send({t:"answer", qn:v.qn, i}); }catch(e){}
+  pub(TOPIC + P.code + "/up", {t:"answer", pid:P.pid, qn:v.qn, i});
   render();
 }
 function playerSendText(text){
   const v = P.view;
   text = String(text || "").trim().slice(0, 60);
-  if (!text || !v || v.phase !== "question" || v.my != null || !P.conn?.open) return;
+  if (!text || !v || v.phase !== "question" || v.my != null || !net || !net.connected) return;
   v.my = text;
-  try{ P.conn.send({t:"answer", qn:v.qn, text}); }catch(e){}
+  pub(TOPIC + P.code + "/up", {t:"answer", pid:P.pid, qn:v.qn, text});
   render();
 }
 function leave(){
   stopTick();
-  if (peer){ peer.destroy(); peer = null; }
-  conns.clear(); role = null; P = null; render();
+  if (beatId){ clearInterval(beatId); beatId = null; }
+  if (role === "host" && H) pub(TOPIC + H.code + "/host", null, true);   // clear the "room is open" flag
+  else if (role === "player" && P) pub(TOPIC + P.code + "/up", {t:"leave", pid:P.pid});
+  const c = net; net = null;
+  if (c) setTimeout(() => { try{ c.end(); }catch(e){} }, 300);
+  role = null; P = null; render();
 }
 
 /* =================== RENDER =================== */
@@ -1308,7 +1347,7 @@ function render(){
     <h1>Last Call <span>Live</span></h1>
     <p>Live party trivia. One screen hosts and shows the questions; everyone answers on their own phone. Faster right answers score more.</p>
   </section>
-  ${hasPeer ? "" : `<p class="banner bad">The multiplayer library didn't load. This page needs an internet connection; reload once you're online.</p>`}
+  ${hasNet ? "" : `<p class="banner bad">The multiplayer connection library didn't load. This page needs an internet connection; reload once you're online.</p>`}
   <div class="home"${hashCode ? ` style="grid-template-columns:minmax(0,1fr);max-width:520px"` : ""}>
     <section class="panel">
       <h3>${hashCode ? `Join room ${esc(hashCode)}` : "Join a game"}</h3>
@@ -1316,15 +1355,15 @@ function render(){
       <div class="field"><label class="label" for="code">Room code</label><input class="input codeinput" id="code" maxlength="4" autocomplete="off" autocapitalize="characters" value="${esc(hashCode || (me && me.code) || "")}" placeholder="ABCD"></div>
       <div class="field"><label class="label" for="name">Your name</label><input class="input" id="name" maxlength="16" autocomplete="nickname" value="${esc((me && me.name) || "")}" placeholder="e.g. Sam"></div>
       ${homeErr ? `<p class="err">${esc(homeErr)}</p>` : ""}
-      <button class="btn big" data-act="join" ${hasPeer ? "" : "disabled"}>Join</button>
+      <button class="btn big" data-act="join" ${hasNet ? "" : "disabled"}>Join</button>
     </section>
     ${hashCode ? "" : `<section class="panel">
       <h3>Host a game</h3>
       <p class="hint"><b>Only one person hosts</b>, on the laptop or TV everyone can see. Everyone else taps <b>Join</b>. Pressing Host on a phone starts a separate, empty room.</p>
       ${confirmHost
         ? `<div class="hostnote"><p class="err" style="margin:0">This looks like a phone. Players should use Join, not Host.</p><div class="actions"><button class="btn" data-act="hostYes">I'm the host, continue</button><button class="btn ghost" data-act="hostNo">Go back</button></div></div>`
-        : `<button class="btn ghost big" data-act="host" ${hasPeer ? "" : "disabled"}>Host on this screen</button>`}
-      ${saved && saved.code && Object.keys(saved.players || {}).length ? `<button class="btn ghost" data-act="resumeHost" ${hasPeer ? "" : "disabled"}>Resume room ${esc(saved.code)} (${Object.keys(saved.players).length} players)</button>` : ""}
+        : `<button class="btn ghost big" data-act="host" ${hasNet ? "" : "disabled"}>Host on this screen</button>`}
+      ${saved && saved.code && Object.keys(saved.players || {}).length ? `<button class="btn ghost" data-act="resumeHost" ${hasNet ? "" : "disabled"}>Resume room ${esc(saved.code)} (${Object.keys(saved.players).length} players)</button>` : ""}
     </section>`}
   </div>`;
 }
@@ -1433,12 +1472,13 @@ function renderPlayer(app, where, acts){
   let banner = "";
   if (P.status === "connecting") banner = `<div class="banner">Joining room ${esc(P.code)}&hellip;</div>`;
   if (P.status === "lost") banner = `<div class="banner bad">Connection dropped. Reconnecting&hellip;</div>`;
+  else if (P.ever && P.hostOnline === false) banner = `<div class="banner bad">The host's screen went offline. Waiting for it to come back&hellip;</div>`;
   if (P.status === "notfound"){
     app.innerHTML = `<div class="phone"><div class="pcard"><h2>No game found</h2><p class="hint">There's no open room with code <b>${esc(P.code)}</b>. Check the code on the host's screen and try again.</p><button class="btn big" data-act="leave">Back</button></div></div>`;
     return;
   }
   if (P.status === "error"){
-    app.innerHTML = `<div class="phone"><div class="pcard"><h2>Can't connect</h2><p class="hint">This browser doesn't support live games. Try Chrome or Safari.</p><button class="btn big" data-act="leave">Back</button></div></div>`;
+    app.innerHTML = `<div class="phone"><div class="pcard"><h2>Can't connect</h2><p class="hint">Couldn't reach the game server. Check your internet connection (Wi-Fi or mobile data) and try again.</p><button class="btn big" data-act="leave">Back</button></div></div>`;
     return;
   }
   if (!v){ app.innerHTML = `<div class="phone">${banner}</div>`; return; }
@@ -1488,7 +1528,7 @@ const actions = {
   hostYes: () => { confirmHost = false; hostCreate(false); },
   hostNo: () => { confirmHost = false; render(); },
   resumeHost: () => { H = store.get("lastcall-live-host"); hostCreate(true); },
-  retryHost: () => { H.status = "connecting"; openHostPeer(3); render(); },
+  retryHost: () => { H.status = "connecting"; openHostNet(0); render(); },
   leave: () => { if (role === "host"){ store.del("lastcall-live-host"); } leave(); },
   count: ({v}) => { H.settings.count = +v; saveHost(); render(); },
   timer: ({v}) => { H.settings.timer = +v; saveHost(); render(); },
