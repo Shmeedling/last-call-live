@@ -8,6 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Figtree:wght@400;500;600;700;800&display=swap">
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
 /* Layout: one file, two roles. Host = big-screen game master view with a side rail; player = one-thumb phone view. */
 :root{
@@ -136,6 +137,11 @@ select.input{font-size:15px;padding:8px 10px}
 .jchip.no{border-color:var(--coral)} .jchip.no .mark{color:var(--coral)}
 .jchip.none{opacity:.5;cursor:default}
 .bigans{font-family:var(--display);font-weight:400;font-size:clamp(32px,6vw,72px);line-height:1.05;color:var(--mint);margin:0;overflow-wrap:anywhere}
+
+.qr{background:var(--fg);padding:12px;border-radius:16px;line-height:0}
+.qr img,.qr canvas{display:block;width:180px;height:180px}
+.hostnote{border:1px dashed var(--line);border-radius:14px;padding:14px;display:grid;gap:10px}
+.roomtag{font-family:var(--display);color:var(--amber);font-size:22px;letter-spacing:.1em}
 
 /* player */
 .phone{max-width:520px;margin:0 auto;display:grid;gap:16px}
@@ -985,6 +991,7 @@ const conns = new Map();   // host: pid -> connection
 let tickId = null;
 let confirmEnd = false;
 let homeErr = "";
+let confirmHost = false;
 
 /* =================== ANSWER MATCHING =================== */
 // Forgiving check for typed answers: ignores case, accents, punctuation and "the/a/an",
@@ -1130,6 +1137,7 @@ function viewFor(pid){
   const p = H.players[pid], q = H.deck[H.qn];
   const v = {t:"view", code:H.code, phase:H.phase, name:p.name, score:p.score, rank:rankOf(pid), players:Object.keys(H.players).length,
     qn:H.qn, count:H.deck.length || H.settings.count, drinks:H.settings.drinks};
+  if (H.phase === "lobby") v.names = Object.values(H.players).filter(x => x.online).map(x => x.name);
   if (q && (H.phase === "question" || H.phase === "reveal")){
     v.mode = H.mode;
     v.q = {cat:CATS[q.cat].name, d:q.d, text:q.q, options:H.mode === "typed" ? null : q.options};
@@ -1301,21 +1309,23 @@ function render(){
     <p>Live party trivia. One screen hosts and shows the questions; everyone answers on their own phone. Faster right answers score more.</p>
   </section>
   ${hasPeer ? "" : `<p class="banner bad">The multiplayer library didn't load. This page needs an internet connection; reload once you're online.</p>`}
-  <div class="home">
+  <div class="home"${hashCode ? ` style="grid-template-columns:minmax(0,1fr);max-width:520px"` : ""}>
     <section class="panel">
-      <h3>Join a game</h3>
-      <p class="hint">Get the 4-letter code from the host's screen.</p>
+      <h3>${hashCode ? `Join room ${esc(hashCode)}` : "Join a game"}</h3>
+      <p class="hint">${hashCode ? "Add your name and tap Join." : "Get the 4-letter code from the host's screen, or scan the QR code on it."}</p>
       <div class="field"><label class="label" for="code">Room code</label><input class="input codeinput" id="code" maxlength="4" autocomplete="off" autocapitalize="characters" value="${esc(hashCode || (me && me.code) || "")}" placeholder="ABCD"></div>
       <div class="field"><label class="label" for="name">Your name</label><input class="input" id="name" maxlength="16" autocomplete="nickname" value="${esc((me && me.name) || "")}" placeholder="e.g. Sam"></div>
       ${homeErr ? `<p class="err">${esc(homeErr)}</p>` : ""}
       <button class="btn big" data-act="join" ${hasPeer ? "" : "disabled"}>Join</button>
     </section>
-    <section class="panel">
+    ${hashCode ? "" : `<section class="panel">
       <h3>Host a game</h3>
-      <p class="hint">Use this on the laptop or TV everyone can see. You're the game master: you see the questions, the answers and the scores. Players answer on their phones.</p>
-      <button class="btn big" data-act="host" ${hasPeer ? "" : "disabled"}>Host on this screen</button>
+      <p class="hint"><b>Only one person hosts</b>, on the laptop or TV everyone can see. Everyone else taps <b>Join</b>. Pressing Host on a phone starts a separate, empty room.</p>
+      ${confirmHost
+        ? `<div class="hostnote"><p class="err" style="margin:0">This looks like a phone. Players should use Join, not Host.</p><div class="actions"><button class="btn" data-act="hostYes">I'm the host, continue</button><button class="btn ghost" data-act="hostNo">Go back</button></div></div>`
+        : `<button class="btn ghost big" data-act="host" ${hasPeer ? "" : "disabled"}>Host on this screen</button>`}
       ${saved && saved.code && Object.keys(saved.players || {}).length ? `<button class="btn ghost" data-act="resumeHost" ${hasPeer ? "" : "disabled"}>Resume room ${esc(saved.code)} (${Object.keys(saved.players).length} players)</button>` : ""}
-    </section>
+    </section>`}
   </div>`;
 }
 
@@ -1340,9 +1350,10 @@ function renderHost(app, where, acts){
     app.innerHTML = `${status}<div class="host">
       <section class="stage">
         <div class="joinbox">
-          <p class="eyebrow">Join on your phone with code</p>
+          <p class="eyebrow">${url ? "Scan to join, or enter the code" : "Join on your phone with code"}</p>
+          ${url ? `<div class="qr" id="qr" aria-label="QR code to join"></div>` : ""}
           <p class="bigcode">${esc(H.code)}</p>
-          <p class="hint" style="font-size:17px">Open Last Call Live, tap <b>Join</b>, type the code and your name.</p>
+          <p class="hint" style="font-size:17px">Open the game on your phone, tap <b>Join</b> (not Host), type the code and your name.</p>
           ${url ? `<p class="joinlink">${esc(url)}</p>` : ""}
         </div>
         <div style="display:grid;gap:10px"><p class="eyebrow">${online.length} player${online.length === 1 ? "" : "s"} in the room</p>
@@ -1364,6 +1375,9 @@ function renderHost(app, where, acts){
           <div class="seg"><button class="btn ghost sm" data-act="allCats">All</button><button class="btn ghost sm" data-act="noCats">None</button></div>
         </section>
       </aside></div>`;
+    const qr = $("#qr");
+    if (qr && url && typeof QRCode !== "undefined"){ try{ new QRCode(qr, {text:url, width:360, height:360, colorDark:"#16112a", colorLight:"#f6eedd", correctLevel:QRCode.CorrectLevel.M}); }catch(e){ qr.remove(); } }
+    else if (qr) qr.remove();
     return;
   }
 
@@ -1431,7 +1445,9 @@ function renderPlayer(app, where, acts){
   const stats = `<div class="stat"><div><b>${v.score}</b><span>Points</span></div><div><b>${ordinal(v.rank)}</b><span>of ${v.players}</span></div></div>`;
   let body = "";
   if (v.phase === "lobby"){
-    body = `<div class="pcard"><p class="eyebrow">You're in</p><h2>${esc(v.name)}</h2><p class="hint">${v.players} player${v.players === 1 ? "" : "s"} in the room. The host will start soon. Keep this screen open.</p></div>`;
+    body = `<div class="pcard"><p class="eyebrow">You're in room <span class="roomtag">${esc(v.code)}</span></p><h2>${esc(v.name)}</h2>
+      <div class="players" style="justify-content:center">${(v.names || []).map(n => `<span class="pchip ${n === v.name ? "done" : ""}">${esc(n)}</span>`).join("")}</div>
+      <p class="hint">Everyone above is in this game. If a friend is missing, check they joined code ${esc(v.code)}. The host will start soon; keep this screen open.</p></div>`;
   } else if (v.phase === "question" && v.q){
     const locked = v.my != null;
     body = `<div class="pcard" style="text-align:left">
@@ -1468,7 +1484,9 @@ function renderPlayer(app, where, acts){
 const toggle = (arr, v) => arr.includes(v) ? arr.filter(x => x !== v) : [...arr, v];
 const actions = {
   join: () => playerJoin($("#code").value, $("#name").value),
-  host: () => hostCreate(false),
+  host: () => { if (window.matchMedia && (matchMedia("(max-width: 760px)").matches || matchMedia("(pointer: coarse)").matches)){ confirmHost = true; render(); } else hostCreate(false); },
+  hostYes: () => { confirmHost = false; hostCreate(false); },
+  hostNo: () => { confirmHost = false; render(); },
   resumeHost: () => { H = store.get("lastcall-live-host"); hostCreate(true); },
   retryHost: () => { H.status = "connecting"; openHostPeer(3); render(); },
   leave: () => { if (role === "host"){ store.del("lastcall-live-host"); } leave(); },
