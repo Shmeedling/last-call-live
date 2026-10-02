@@ -1,0 +1,1511 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Last Call Live</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Figtree:wght@400;500;600;700;800&display=swap">
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<style>
+/* Layout: one file, two roles. Host = big-screen game master view with a side rail; player = one-thumb phone view. */
+:root{
+  color-scheme: dark;
+  --bg:#16112a; --panel:#211a3b; --panel-2:#2b2250; --line:#3d3369;
+  --fg:#f6eedd; --muted:#b2a7cf;
+  --amber:#f5b53f; --amber-ink:#2b1b00;
+  --mint:#5cd6a4; --coral:#ff7361; --violet:#a594ff;
+  --display:"Bungee","Impact","Arial Black",sans-serif;
+  --body:"Figtree","Segoe UI",system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+html{min-height:100%}
+[hidden]{display:none!important}
+html,body{background:var(--bg);color:var(--fg)}
+body{margin:0;font-family:var(--body);font-size:16px;line-height:1.5;
+  background:radial-gradient(1200px 600px at 85% -10%, #2c1f55 0%, transparent 60%), var(--bg);min-height:100vh}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--amber);outline-offset:2px}
+.wrap{max-width:1180px;margin:0 auto;padding-inline:16px;padding-block:16px 48px}
+.bar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding-block:6px 18px}
+.brand{font-family:var(--display);font-size:20px;letter-spacing:.02em;color:var(--amber);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.brand small{font-family:var(--body);font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.bar-actions{display:flex;gap:8px;flex-wrap:wrap}
+.btn{border:0;border-radius:999px;padding:12px 22px;font-weight:800;background:var(--amber);color:var(--amber-ink);font-size:16px;transition:transform .12s, filter .12s}
+.btn:hover{filter:brightness(1.08)}
+.btn:active{transform:translateY(1px)}
+.btn[disabled]{opacity:.4;cursor:not-allowed}
+.btn.ghost{background:transparent;color:var(--fg);border:2px solid var(--line)}
+.btn.ghost:hover{border-color:var(--muted)}
+.btn.sm{padding:7px 14px;font-size:14px}
+.btn.big{padding:16px 30px;font-size:18px}
+.btn.warn{background:var(--coral);color:#2a0700}
+.hero{display:grid;gap:10px;padding-block:8px 24px}
+.hero h1{font-family:var(--display);font-weight:400;font-size:clamp(44px,9vw,92px);line-height:.92;margin:0;text-wrap:balance}
+.hero h1 span{color:var(--amber)}
+.hero p{margin:0;color:var(--muted);max-width:60ch;font-size:17px}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+@media (max-width:820px){.grid{grid-template-columns:minmax(0,1fr)}}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:20px;display:grid;gap:14px;align-content:start;min-width:0}
+.panel h2{margin:0;font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--amber);font-weight:800}
+.hint{margin:0;color:var(--muted);font-size:14px}
+.span2{grid-column:1/-1}
+.seg{display:flex;flex-wrap:wrap;gap:8px}
+.chip{border:2px solid var(--line);background:var(--panel-2);border-radius:999px;padding:8px 14px;font-weight:700;font-size:15px}
+.chip[aria-pressed="true"]{background:var(--amber);border-color:var(--amber);color:var(--amber-ink)}
+.label{font-size:13px;color:var(--muted);font-weight:700}
+.row{display:flex;gap:18px;flex-wrap:wrap}
+.row > div{display:grid;gap:8px}
+.err{color:var(--coral);font-weight:700;margin:0}
+.eyebrow{font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);font-weight:800;margin:0}
+.tags{display:flex;gap:8px;flex-wrap:wrap;justify-content:inherit}
+.tag{border-radius:999px;padding:4px 12px;font-size:13px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;background:var(--panel-2);border:1px solid var(--line)}
+.tag.diff{color:var(--dc);border-color:var(--dc)}
+.d-e{--dc:var(--mint)} .d-m{--dc:var(--amber)} .d-h{--dc:var(--coral)}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.input{background:var(--bg);border:2px solid var(--line);border-radius:12px;padding:12px 14px;font-size:18px;font-weight:700;min-width:0;width:100%}
+.input:focus{border-color:var(--amber);outline:none}
+select.input{font-size:15px;padding:8px 10px}
+@media (prefers-reduced-motion:no-preference){
+  .pop{animation:pop .35s cubic-bezier(.2,1.4,.4,1)}
+  @keyframes pop{from{transform:scale(.94);opacity:.4}to{transform:none;opacity:1}}
+}
+
+.o0{--oc:var(--amber)} .o1{--oc:var(--mint)} .o2{--oc:var(--coral)} .o3{--oc:var(--violet)}
+.home{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+@media (max-width:760px){.home{grid-template-columns:minmax(0,1fr)}}
+.home .panel{padding:24px}
+.home h3{margin:0;font-family:var(--display);font-weight:400;font-size:28px}
+.field{display:grid;gap:6px}
+.codeinput{text-transform:uppercase;letter-spacing:.3em;font-family:var(--display);font-size:28px;text-align:center}
+.banner{border-radius:12px;padding:10px 14px;font-weight:700;background:var(--panel-2);border:1px solid var(--line)}
+.banner.bad{border-color:var(--coral);color:var(--coral)}
+.banner.ok{border-color:var(--mint);color:var(--mint)}
+
+/* host */
+.host{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:20px;align-items:start}
+@media (max-width:900px){.host{grid-template-columns:minmax(0,1fr)}}
+.stage{background:var(--panel);border:1px solid var(--line);border-radius:22px;padding:clamp(18px,3vw,36px);display:grid;gap:20px;min-width:0}
+.rail{display:grid;gap:16px;min-width:0}
+.joinbox{display:grid;gap:10px;justify-items:center;text-align:center;padding-block:10px}
+.bigcode{font-family:var(--display);font-size:clamp(64px,12vw,140px);line-height:1;letter-spacing:.12em;color:var(--amber);margin:0}
+.joinlink{font-size:15px;color:var(--muted);overflow-wrap:anywhere;max-width:100%}
+.players{display:flex;flex-wrap:wrap;gap:8px}
+.pchip{border-radius:999px;padding:6px 14px;font-weight:700;background:var(--panel-2);border:2px solid var(--line)}
+.pchip.done{border-color:var(--mint);color:var(--mint)}
+.pchip.off{opacity:.45;text-decoration:line-through}
+.hq{font-size:clamp(26px,3.8vw,52px);line-height:1.18;font-weight:800;margin:0;text-wrap:balance}
+.hopts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+@media (max-width:560px){.hopts{grid-template-columns:minmax(0,1fr)}}
+.hopt{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:12px;border-radius:16px;padding:14px 16px;background:var(--panel-2);border:2px solid var(--oc);font-size:clamp(17px,2vw,26px);font-weight:700;position:relative;overflow:hidden;min-width:0}
+.hopt .k{width:1.7em;height:1.7em;border-radius:10px;background:var(--oc);color:var(--amber-ink);display:grid;place-items:center;font-family:var(--display);font-size:.8em}
+.hopt .n{font-family:var(--display);font-size:.9em;font-variant-numeric:tabular-nums}
+.hopt .barfill{position:absolute;inset:0 auto 0 0;background:var(--oc);opacity:.14;z-index:0}
+.hopt > *{position:relative;z-index:1}
+.hopt.dim{opacity:.35}
+.hopt.right{box-shadow:0 0 0 3px var(--oc)}
+.tline{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center}
+.track{height:12px;border-radius:999px;background:var(--bg);overflow:hidden;border:1px solid var(--line)}
+.fill{height:100%;background:var(--amber);width:100%}
+.fill.low{background:var(--coral)}
+.tnum{font-family:var(--display);font-size:24px;min-width:2ch;text-align:right;font-variant-numeric:tabular-nums}
+.board{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.board li{display:grid;grid-template-columns:1.6em minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px 12px;border-radius:12px;background:var(--panel-2)}
+.board .pos{font-family:var(--display);color:var(--amber)}
+.board .nm{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.board .nm small{display:block;font-size:12px;font-weight:700}
+.board .sc{font-family:var(--display);font-variant-numeric:tabular-nums}
+.up{color:var(--mint)} .miss{color:var(--coral)}
+.sips{border:2px dashed var(--coral);border-radius:14px;padding:12px 16px;display:grid;gap:4px}
+.sips b{color:var(--coral);font-size:13px;letter-spacing:.12em;text-transform:uppercase}
+.answerline{font-size:20px;margin:0}
+.answerline b{color:var(--mint)}
+
+/* typed answers */
+.typed{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px}
+.typed .input{font-size:20px}
+.mine-text{font-size:18px;font-weight:700;margin:0}
+.mine-text q{color:var(--amber)}
+.judge{display:flex;flex-wrap:wrap;gap:8px}
+.jchip{display:flex;gap:8px;align-items:center;border-radius:12px;padding:8px 12px;border:2px solid var(--line);background:var(--panel-2);font-weight:700;text-align:left;max-width:100%}
+.jchip .who{color:var(--muted);font-size:13px}
+.jchip .said{overflow-wrap:anywhere}
+.jchip.ok{border-color:var(--mint)} .jchip.ok .mark{color:var(--mint)}
+.jchip.no{border-color:var(--coral)} .jchip.no .mark{color:var(--coral)}
+.jchip.none{opacity:.5;cursor:default}
+.bigans{font-family:var(--display);font-weight:400;font-size:clamp(32px,6vw,72px);line-height:1.05;color:var(--mint);margin:0;overflow-wrap:anywhere}
+
+/* player */
+.phone{max-width:520px;margin:0 auto;display:grid;gap:16px}
+.pcard{background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:20px;display:grid;gap:14px;text-align:center}
+.pcard h2{margin:0;font-family:var(--display);font-weight:400;font-size:clamp(28px,8vw,40px);line-height:1.05;text-wrap:balance}
+.pq{font-size:20px;font-weight:700;margin:0;text-wrap:balance}
+.pbtns{display:grid;grid-template-columns:minmax(0,1fr);gap:10px}
+.pbtn{display:grid;grid-template-columns:auto minmax(0,1fr);gap:12px;align-items:center;text-align:left;border:0;border-radius:16px;padding:16px;background:var(--oc);color:var(--amber-ink);font-weight:800;font-size:19px;min-height:64px}
+.pbtn .k{width:36px;height:36px;border-radius:10px;background:rgba(0,0,0,.18);display:grid;place-items:center;font-family:var(--display);font-size:16px}
+.pbtn[disabled]{opacity:.35;cursor:default}
+.pbtn.mine{opacity:1;outline:4px solid var(--fg);outline-offset:2px}
+.verdict{font-family:var(--display);font-size:clamp(40px,12vw,64px);line-height:1;margin:0}
+.verdict.good{color:var(--mint)} .verdict.bad{color:var(--coral)}
+.stat{display:flex;justify-content:center;gap:24px;flex-wrap:wrap}
+.stat div{display:grid}
+.stat b{font-family:var(--display);font-size:28px;font-variant-numeric:tabular-nums}
+.stat span{font-size:12px;color:var(--muted);letter-spacing:.12em;text-transform:uppercase;font-weight:800}
+.sipcall{background:var(--coral);color:#2a0700;border-radius:14px;padding:12px;font-weight:800;font-size:18px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="bar">
+    <div class="brand">Last Call Live <small id="where"></small></div>
+    <div class="bar-actions" id="barActions"></div>
+  </header>
+  <main id="app"></main>
+</div>
+
+<script>
+const CATS = {
+  general:{name:"General Knowledge", blurb:"A bit of everything",
+    e:[["How many days are in a leap year?","366","365","364","367"],
+       ["What colour do you get by mixing blue and yellow?","Green","Purple","Orange","Brown"],
+       ["How many sides does a hexagon have?","6","5","7","8"],
+       ["Which animal is known as the King of the Jungle?","Lion","Tiger","Elephant","Gorilla"],
+       ["How many hours are in two days?","48","36","24","72"],
+       ["Which month has the fewest days?","February","April","June","November"],
+       ["What shape is a standard stop sign?","Octagon","Hexagon","Pentagon","Circle"],
+       ["How many years are in a century?","100","10","1,000","50"],
+       ["How many letters are in the English alphabet?","26","24","28","25"],
+       ["How many is a \u201cbaker's dozen\u201d?","13","12","14","11"],
+       ["What colour is an emerald?","Green","Red","Blue","Purple"],
+       ["How many cents are in a U.S. quarter?","25","20","50","10"],
+       ["Who comes down the chimney at Christmas?","Santa Claus","The Easter Bunny","The Tooth Fairy","Jack Frost"],
+       ["How many wheels does a tricycle have?","3","2","4","5"],
+       ["What is the plural of \u201cmouse\u201d?","Mice","Mouses","Meese","Mousen"],
+       ["What is a baby cat called?","Kitten","Puppy","Cub","Kid"],
+       ["What does a thermometer measure?","Temperature","Air pressure","Humidity","Wind speed"],
+       ["What colour are classic U.S. school buses?","Yellow","Red","Orange","White"],
+       ["Which puzzle toy is a cube with six coloured faces?","Rubik's Cube","Jenga","Etch A Sketch","Tetris"],
+       ["Which fairy-tale girl visits the Three Bears?","Goldilocks","Little Red Riding Hood","Snow White","Rapunzel"]],
+    m:[["How many pieces does each player start with in chess?","16","12","18","20"],
+       ["How many cards are in a standard deck, without jokers?","52","54","48","56"],
+       ["Which language has the most native speakers?","Mandarin Chinese","English","Spanish","Hindi"],
+       ["What is the currency of Japan?","Yen","Won","Yuan","Ringgit"],
+       ["How many zeros are in one million?","6","5","7","9"],
+       ["How many minutes are in a week?","10,080","8,640","10,800","12,040"],
+       ["What number is at the top of a standard dartboard?","20","1","12","5"],
+       ["Which chess piece can only move diagonally?","Bishop","Rook","Knight","Queen"],
+       ["What is the traditional 1st wedding anniversary gift?","Paper","Cotton","Wood","Leather"],
+       ["A word that reads the same backwards is a\u2026","Palindrome","Anagram","Acronym","Homophone"],
+       ["How many months have 31 days?","7","6","5","8"],
+       ["What is the Roman numeral for 50?","L","C","D","V"],
+       ["How many squares are on a chessboard?","64","81","100","49"],
+       ["Which wedding anniversary is the 25th?","Silver","Gold","Ruby","Pearl"],
+       ["What is the currency of Switzerland?","Swiss franc","Euro","Krone","Mark"],
+       ["In the NATO alphabet, which word stands for Z?","Zulu","Zebra","Zero","Zeta"],
+       ["What does \u201cwww\u201d stand for in a web address?","World Wide Web","World Web Wide","Wide World Web","Web World Wide"],
+       ["Which day of the week is named after Thor?","Thursday","Tuesday","Wednesday","Friday"],
+       ["In Monopoly, what colour are the priciest properties?","Dark blue","Green","Red","Yellow"],
+       ["What is a group of lions called?","A pride","A pack","A herd","A troop"]],
+    h:[["Which letter doesn't appear in any U.S. state name?","Q","Z","X","J"],
+       ["What is a group of crows called?","A murder","A parliament","A conspiracy","A clatter"],
+       ["What is the (ironic) name for the fear of long words?","Hippopotomonstrosesquippedaliophobia","Arachibutyrophobia","Triskaidekaphobia","Sesquipedalophilia"],
+       ["What is the national animal of Scotland?","Unicorn","Lion","Red deer stag","Golden eagle"],
+       ["In what year was the first email sent?","1971","1983","1965","1990"],
+       ["How many dots are on a standard six-sided die in total?","21","18","24","20"],
+       ["Which number's letters are in alphabetical order?","Forty","Fifty","Eight","Six"],
+       ["How many years does a sesquicentennial mark?","150","250","125","175"],
+       ["Which wedding anniversary is the 40th?","Ruby","Pearl","Emerald","Sapphire"],
+       ["What is the dot over a lowercase \u201ci\u201d called?","A tittle","A serif","A kern","A ligature"],
+       ["What year is MCMLXXXIV?","1984","1964","1986","1974"],
+       ["What is the \u201c&\u201d symbol called?","Ampersand","Asterisk","Interrobang","Pilcrow"],
+       ["What is a group of owls called?","A parliament","A murder","A gaggle","A pride"],
+       ["In Morse code, which letter is a single dot?","E","T","I","A"],
+       ["What is a 14-line poem called?","Sonnet","Haiku","Limerick","Villanelle"],
+       ["What is the smallest prime number?","2","1","3","0"],
+       ["How many faces does an icosahedron have?","20","12","8","24"],
+       ["What is a googol?","10 to the power 100","10 to the power 10","10 to the power 1,000","10 to the power 50"],
+       ["How many tiles are in a double-six domino set?","28","24","32","36"],
+       ["How many squares are on a Scrabble board?","225","196","256","144"]]},
+  movies:{name:"Movies & TV", blurb:"Screens big and small",
+    e:[["What is the name of the snowman in Frozen?","Olaf","Sven","Kristoff","Hans"],
+       ["Which movie features the line \u201cI'll be back\u201d?","The Terminator","Die Hard","Rambo","Predator"],
+       ["What is the name of the coffee shop in Friends?","Central Perk","Java Joe's","The Grind","Monk's"],
+       ["Who lives in a pineapple under the sea?","SpongeBob SquarePants","Patrick Star","Squidward","Mr. Krabs"],
+       ["In The Lion King, what is Simba's father called?","Mufasa","Scar","Rafiki","Zazu"],
+       ["Which school does Harry Potter attend?","Hogwarts","Durmstrang","Beauxbatons","Ilvermorny"],
+       ["Which 1997 film starred Leonardo DiCaprio as Jack Dawson?","Titanic","The Beach","Romeo + Juliet","Catch Me If You Can"],
+       ["In The Wizard of Oz, what is Dorothy's dog called?","Toto","Rover","Buster","Benji"],
+       ["What does E.T. famously want to do?","Phone home","Eat candy","Find his dog","Fly to Mars"],
+       ["In Jurassic Park, what animals are brought back to life?","Dinosaurs","Mammoths","Dragons","Sabre-tooth cats"],
+       ["What is the name of Homer Simpson's wife?","Marge","Lisa","Maggie","Patty"],
+       ["In Back to the Future, what car is the time machine?","A DeLorean","A Mustang","A Corvette","A Camaro"],
+       ["Who played Rocky Balboa?","Sylvester Stallone","Arnold Schwarzenegger","Bruce Willis","Mel Gibson"],
+       ["In Shrek, what kind of creature is Shrek?","An ogre","A troll","A goblin","A giant"],
+       ["Which show features dragons and the Iron Throne?","Game of Thrones","The Witcher","Vikings","The Last Kingdom"],
+       ["Who played Forrest Gump?","Tom Hanks","Tom Cruise","Kevin Costner","Robin Williams"],
+       ["In The Matrix, what colour pill does Neo take?","Red","Blue","Green","White"],
+       ["What is James Bond's code number?","007","006","009","001"],
+       ["Who played Danny Zuko in Grease?","John Travolta","Patrick Swayze","Richard Gere","Tom Cruise"],
+       ["In Home Alone, where is Kevin's family flying to?","Paris","London","Rome","New York"]],
+    m:[["Who directed Jaws (1975)?","Steven Spielberg","George Lucas","Martin Scorsese","Ridley Scott"],
+       ["In Breaking Bad, what alias does Walter White use?","Heisenberg","Schr\u00f6dinger","Oppenheimer","Einstein"],
+       ["What paper company do they work for in The Office (US)?","Dunder Mifflin","Wernham Hogg","Sabre","Staples"],
+       ["What is the fictional African nation in Black Panther?","Wakanda","Zamunda","Genovia","Latveria"],
+       ["How many Infinity Stones are there in the Marvel films?","6","5","7","8"],
+       ["In Stranger Things, what is the parallel dimension called?","The Upside Down","The Other Side","The Shadow Realm","The Void"],
+       ["In The Godfather, whose head ends up in a bed?","A horse's","A pig's","A goat's","A dog's"],
+       ["In Pulp Fiction, a \u201cRoyale with Cheese\u201d is a\u2026","Quarter Pounder","Big Mac","Whopper","Double cheeseburger"],
+       ["Who played the Joker in The Dark Knight (2008)?","Heath Ledger","Jared Leto","Jack Nicholson","Joaquin Phoenix"],
+       ["Which hobbit does Elijah Wood play in The Lord of the Rings?","Frodo Baggins","Samwise Gamgee","Bilbo Baggins","Merry Brandybuck"],
+       ["In which city is Breaking Bad set?","Albuquerque","Phoenix","El Paso","Santa Fe"],
+       ["Who directed both Titanic and Avatar?","James Cameron","Ridley Scott","Peter Jackson","Steven Spielberg"],
+       ["In Mean Girls, on Wednesdays they wear\u2026","Pink","Black","Red","White"],
+       ["Which 1994 prison film features Andy Dufresne?","The Shawshank Redemption","The Green Mile","Escape from Alcatraz","Papillon"],
+       ["In How I Met Your Mother, what is the gang's bar?","MacLaren's","Paddy's Pub","Moe's Tavern","The Drunken Clam"],
+       ["Who played Ferris Bueller?","Matthew Broderick","John Cusack","Rob Lowe","Emilio Estevez"],
+       ["What is Tom Cruise's call sign in Top Gun?","Maverick","Iceman","Goose","Viper"],
+       ["Which sitcom is set in Pawnee, Indiana?","Parks and Recreation","Community","Brooklyn Nine-Nine","30 Rock"],
+       ["What giant monster stomps NYC in Ghostbusters (1984)?","Stay Puft Marshmallow Man","The Michelin Man","The Pillsbury Doughboy","The Kool-Aid Man"],
+       ["Which line comes from The Sixth Sense?","\u201cI see dead people.\u201d","\u201cHere's Johnny!\u201d","\u201cThey're here.\u201d","\u201cI'll be back.\u201d"]],
+    h:[["Which film won the very first Best Picture Oscar?","Wings","Sunrise","The Jazz Singer","Metropolis"],
+       ["In Seinfeld, what is Kramer's first name?","Cosmo","Kenny","Stanley","Elliot"],
+       ["What is the name of the hotel in The Shining?","The Overlook","The Stanley","The Bates Motel","The Grand Budapest"],
+       ["What is the name of the strip club in The Sopranos?","Bada Bing!","Satriale's","Vesuvio","The Crazy Horse"],
+       ["In Citizen Kane, what is \u201cRosebud\u201d?","A sled","A horse","A boat","A lost love"],
+       ["Who directed Parasite (2019)?","Bong Joon-ho","Park Chan-wook","Kim Jee-woon","Hirokazu Kore-eda"],
+       ["What is the name of the spaceship in Alien (1979)?","Nostromo","Sulaco","Prometheus","Covenant"],
+       ["In Casablanca, what is Rick's nightclub called?","Rick's Caf\u00e9 Am\u00e9ricain","The Blue Parrot","Club Casablanca","Caf\u00e9 Marrakech"],
+       ["Who directed 2001: A Space Odyssey?","Stanley Kubrick","Ridley Scott","George Lucas","Andrei Tarkovsky"],
+       ["In Fargo (1996), what machine disposes of a body?","A woodchipper","A furnace","A trash compactor","A cement mixer"],
+       ["What is The Dude's drink of choice in The Big Lebowski?","White Russian","Black Russian","Moscow Mule","Old Fashioned"],
+       ["In The Usual Suspects, who turns out to be Keyser S\u00f6ze?","Verbal Kint","Dean Keaton","Fred Fenster","Todd Hockney"],
+       ["Which was the first film to win the \u201cBig Five\u201d Oscars?","It Happened One Night","Gone with the Wind","Casablanca","Ben-Hur"],
+       ["In which city is The Wire set?","Baltimore","Philadelphia","Detroit","Chicago"],
+       ["In Lost, what are \u201cthe numbers\u201d?","4 8 15 16 23 42","3 7 14 21 28 42","4 8 16 23 32 42","1 2 3 5 8 13"],
+       ["Who played the T-1000 in Terminator 2?","Robert Patrick","Michael Biehn","Billy Zane","Lance Henriksen"],
+       ["In Blade Runner, what are the androids called?","Replicants","Synthetics","Cylons","Hosts"],
+       ["In Groundhog Day, which town is Phil stuck in?","Punxsutawney","Pittsburgh","Lancaster","Harrisburg"],
+       ["In Goodfellas, who asks \u201cFunny how? Like I'm a clown?\u201d","Joe Pesci","Robert De Niro","Ray Liotta","Paul Sorvino"],
+       ["Who directed Seven Samurai (1954)?","Akira Kurosawa","Yasujir\u014d Ozu","Hayao Miyazaki","Kenji Mizoguchi"]]},
+  music:{name:"Music", blurb:"Bangers and ballads",
+    e:[["Which band was John Lennon in?","The Beatles","The Rolling Stones","The Who","Queen"],
+       ["Who is known as the King of Pop?","Michael Jackson","Elvis Presley","Prince","Justin Timberlake"],
+       ["How many strings does a standard guitar have?","6","4","5","8"],
+       ["Whose fans call themselves Swifties?","Taylor Swift","Ariana Grande","Billie Eilish","Olivia Rodrigo"],
+       ["Who sang \u201cRolling in the Deep\u201d?","Adele","Amy Winehouse","Duffy","Sia"],
+       ["Who was the lead singer of Queen?","Freddie Mercury","Brian May","Roger Taylor","David Bowie"],
+       ["Who sang \u201cLike a Virgin\u201d?","Madonna","Cyndi Lauper","Whitney Houston","Kylie Minogue"],
+       ["Which group released \u201cWannabe\u201d in 1996?","Spice Girls","All Saints","Destiny's Child","TLC"],
+       ["Who is known as the King of Rock and Roll?","Elvis Presley","Chuck Berry","Little Richard","Buddy Holly"],
+       ["How many keys does a standard piano have?","88","76","92","100"],
+       ["Who sang \u201c...Baby One More Time\u201d?","Britney Spears","Christina Aguilera","Jessica Simpson","Mandy Moore"],
+       ["Who sang \u201cBad Guy\u201d (2019)?","Billie Eilish","Lorde","Olivia Rodrigo","Halsey"],
+       ["Who sang \u201cPurple Rain\u201d?","Prince","Stevie Wonder","Lionel Richie","Michael Jackson"],
+       ["Who sang \u201cShape of You\u201d?","Ed Sheeran","Sam Smith","Shawn Mendes","Lewis Capaldi"],
+       ["Which band sang \u201cLivin' on a Prayer\u201d?","Bon Jovi","Def Leppard","Journey","Van Halen"],
+       ["Who sang \u201cI Will Always Love You\u201d in The Bodyguard?","Whitney Houston","Mariah Carey","Celine Dion","Toni Braxton"],
+       ["Which Celine Dion song is the theme from Titanic?","My Heart Will Go On","Because You Loved Me","The Power of Love","It's All Coming Back to Me Now"],
+       ["Which face-painted band sang \u201cRock and Roll All Nite\u201d?","KISS","M\u00f6tley Cr\u00fce","AC/DC","Twisted Sister"],
+       ["Who had a huge 2012 hit with \u201cGangnam Style\u201d?","Psy","BTS","Rain","Big Bang"],
+       ["Who sang on Mark Ronson's \u201cUptown Funk\u201d?","Bruno Mars","Pharrell Williams","Justin Timberlake","Robin Thicke"]],
+    m:[["Which band released \u201cSmells Like Teen Spirit\u201d?","Nirvana","Pearl Jam","Soundgarden","Foo Fighters"],
+       ["Which rapper's real name is Marshall Mathers?","Eminem","50 Cent","Dr. Dre","Mac Miller"],
+       ["What was Lady Gaga's debut single?","Just Dance","Poker Face","Bad Romance","Paparazzi"],
+       ["Which country is ABBA from?","Sweden","Norway","Denmark","Finland"],
+       ["Beyonc\u00e9 first found fame in which group?","Destiny's Child","TLC","En Vogue","Spice Girls"],
+       ["How many members did One Direction start with?","5","4","6","3"],
+       ["Which band sang \u201cDon't Stop Believin'\u201d?","Journey","Boston","Foreigner","REO Speedwagon"],
+       ["Which band sang \u201cAfrica\u201d (1982)?","Toto","Chicago","Foreigner","Styx"],
+       ["Who sang \u201cRespect\u201d in 1967?","Aretha Franklin","Diana Ross","Tina Turner","Gladys Knight"],
+       ["Which band released \u201cWonderwall\u201d?","Oasis","Blur","Pulp","The Verve"],
+       ["Who was the lead singer of The Police?","Sting","Bono","Phil Collins","Mark Knopfler"],
+       ["Which rapper released \u201cGin and Juice\u201d?","Snoop Dogg","Dr. Dre","Ice Cube","Warren G"],
+       ["Which band made The Dark Side of the Moon?","Pink Floyd","Led Zeppelin","The Who","Genesis"],
+       ["Which duo released \u201cGet Lucky\u201d in 2013?","Daft Punk","Justice","The Chemical Brothers","Air"],
+       ["Which band released \u201cHotel California\u201d?","Eagles","Fleetwood Mac","Lynyrd Skynyrd","The Doobie Brothers"],
+       ["Which band sang \u201cMr. Brightside\u201d?","The Killers","The Strokes","Franz Ferdinand","Kings of Leon"],
+       ["Who sang \u201cGirls Just Want to Have Fun\u201d?","Cyndi Lauper","Madonna","Pat Benatar","Debbie Harry"],
+       ["Which country are AC/DC from?","Australia","England","USA","Canada"],
+       ["Which Fleetwood Mac album features \u201cDreams\u201d?","Rumours","Tusk","Tango in the Night","Mirage"],
+       ["Which girl group sang \u201cWaterfalls\u201d?","TLC","En Vogue","SWV","Salt-N-Pepa"]],
+    h:[["What was the first music video ever played on MTV?","Video Killed the Radio Star","Thriller","Money for Nothing","Take On Me"],
+       ["Which band made the albums OK Computer and Kid A?","Radiohead","Coldplay","Muse","Blur"],
+       ["What was Freddie Mercury's birth name?","Farrokh Bulsara","Frederick Bulmer","Farid Bashir","Feroz Bhatt"],
+       ["In which city was Mozart born?","Salzburg","Vienna","Prague","Munich"],
+       ["Which singer was born Stefani Germanotta?","Lady Gaga","Gwen Stefani","Madonna","Katy Perry"],
+       ["In what year was Woodstock?","1969","1967","1971","1965"],
+       ["What was Prince's Minnesota studio complex called?","Paisley Park","Graceland","Neverland Ranch","Electric Lady"],
+       ["In 2016, Bob Dylan won a Nobel Prize in which field?","Literature","Peace","Economics","Medicine"],
+       ["Who composed \u201cThe Four Seasons\u201d?","Antonio Vivaldi","J. S. Bach","George Frideric Handel","Joseph Haydn"],
+       ["Ozzy Osbourne was the original singer of which band?","Black Sabbath","Judas Priest","Deep Purple","Iron Maiden"],
+       ["In what year did Kurt Cobain die?","1994","1993","1995","1996"],
+       ["Which band had the 1985 hit \u201cTake On Me\u201d?","a-ha","Alphaville","Duran Duran","Tears for Fears"],
+       ["How many symphonies did Beethoven complete?","9","7","10","12"],
+       ["Who co-founded Death Row Records with Suge Knight?","Dr. Dre","Snoop Dogg","Eazy-E","Ice Cube"],
+       ["Which musician created the persona Ziggy Stardust?","David Bowie","Marc Bolan","Elton John","Iggy Pop"],
+       ["Whose debut album was Appetite for Destruction?","Guns N' Roses","M\u00f6tley Cr\u00fce","Poison","Skid Row"],
+       ["Who was nicknamed \u201cThe Godfather of Soul\u201d?","James Brown","Ray Charles","Marvin Gaye","Otis Redding"],
+       ["In which city was Motown Records founded?","Detroit","Memphis","Chicago","Philadelphia"],
+       ["Who was the Sex Pistols' lead singer?","Johnny Rotten","Sid Vicious","Joe Strummer","Billy Idol"],
+       ["Which trumpeter recorded the album Kind of Blue?","Miles Davis","Louis Armstrong","Dizzy Gillespie","Chet Baker"]]},
+  science:{name:"Science & Nature", blurb:"Lab coats optional",
+    e:[["Which planet is known as the Red Planet?","Mars","Venus","Jupiter","Mercury"],
+       ["Which gas do plants absorb from the air?","Carbon dioxide","Oxygen","Nitrogen","Helium"],
+       ["What is H\u2082O better known as?","Water","Salt","Hydrogen peroxide","Air"],
+       ["How many legs does a spider have?","8","6","10","12"],
+       ["What is the largest planet in our solar system?","Jupiter","Saturn","Neptune","Earth"],
+       ["What is the closest star to Earth?","The Sun","Proxima Centauri","Sirius","Polaris"],
+       ["How many legs does an insect have?","6","8","4","10"],
+       ["At sea level, water boils at what temperature?","100\u00b0C","80\u00b0C","120\u00b0C","212\u00b0C"],
+       ["What do bees collect from flowers to make honey?","Nectar","Sap","Dew","Resin"],
+       ["Which planet is closest to the Sun?","Mercury","Venus","Mars","Earth"],
+       ["What is the largest animal on Earth?","Blue whale","African elephant","Whale shark","Giraffe"],
+       ["Which force keeps your feet on the ground?","Gravity","Magnetism","Friction","Inertia"],
+       ["What is a baby frog called?","Tadpole","Larva","Fry","Fawn"],
+       ["How many planets are in our solar system?","8","9","7","10"],
+       ["What is the fastest land animal?","Cheetah","Lion","Pronghorn","Greyhound"],
+       ["Which organ pumps blood around the body?","Heart","Lungs","Liver","Kidneys"],
+       ["What pigment makes plants green?","Chlorophyll","Melanin","Carotene","Keratin"],
+       ["What is the tallest animal in the world?","Giraffe","Elephant","Ostrich","Camel"],
+       ["Which body part has an iris and a pupil?","Eye","Ear","Tongue","Nose"],
+       ["What type of animal is a whale?","Mammal","Fish","Reptile","Amphibian"]],
+    m:[["What is the chemical symbol for gold?","Au","Ag","Gd","Go"],
+       ["How many bones are in the adult human body?","206","212","198","230"],
+       ["What is the hardest natural substance?","Diamond","Quartz","Titanium","Granite"],
+       ["What is the largest organ of the human body?","Skin","Liver","Brain","Lungs"],
+       ["Which blood type is the universal donor?","O negative","AB positive","O positive","A negative"],
+       ["Which part of the cell is called its powerhouse?","Mitochondria","Nucleus","Ribosome","Golgi apparatus"],
+       ["What is the chemical symbol for iron?","Fe","Ir","In","I"],
+       ["How many chambers does the human heart have?","4","2","3","6"],
+       ["What is the hottest planet in our solar system?","Venus","Mercury","Mars","Jupiter"],
+       ["What is the pH of pure water?","7","0","14","1"],
+       ["What does DNA stand for?","Deoxyribonucleic acid","Dinucleic acid","Diribonucleic acid","Deoxyribose nitric acid"],
+       ["Which bird lays the largest eggs?","Ostrich","Emu","Eagle","Albatross"],
+       ["How many teeth does an adult have, wisdom teeth included?","32","28","30","36"],
+       ["What is the longest bone in the human body?","Femur","Tibia","Humerus","Fibula"],
+       ["Which element has atomic number 1?","Hydrogen","Helium","Oxygen","Carbon"],
+       ["What type of rock forms from cooled lava?","Igneous","Sedimentary","Metamorphic","Limestone"],
+       ["Roughly how long does sunlight take to reach Earth?","8 minutes","8 seconds","8 hours","80 minutes"],
+       ["What is a baby kangaroo called?","Joey","Kit","Cub","Calf"],
+       ["Which vitamin does your skin make from sunlight?","Vitamin D","Vitamin C","Vitamin A","Vitamin B12"],
+       ["What is the freezing point of water in Fahrenheit?","32\u00b0F","0\u00b0F","12\u00b0F","100\u00b0F"]],
+    h:[["What is the most abundant gas in Earth's atmosphere?","Nitrogen","Oxygen","Argon","Carbon dioxide"],
+       ["How many hearts does an octopus have?","3","1","2","8"],
+       ["Which metal is liquid at room temperature?","Mercury","Lead","Tin","Sodium"],
+       ["Roughly how fast does light travel?","300,000 km/s","150,000 km/s","30,000 km/s","3,000,000 km/s"],
+       ["Which element has the chemical symbol K?","Potassium","Krypton","Calcium","Phosphorus"],
+       ["Which planet has the most known moons?","Saturn","Jupiter","Uranus","Neptune"],
+       ["What is the smallest bone in the human body?","Stapes","Incus","Malleus","Hyoid"],
+       ["Which planet spins on its side?","Uranus","Neptune","Venus","Saturn"],
+       ["What is the study of fungi called?","Mycology","Bryology","Oology","Herpetology"],
+       ["What is the chemical symbol for tungsten?","W","Tg","Tu","Tn"],
+       ["What is the most abundant element in the universe?","Hydrogen","Helium","Oxygen","Carbon"],
+       ["Which is the only mammal capable of true flight?","Bat","Flying squirrel","Sugar glider","Colugo"],
+       ["A shark's skeleton is made of what?","Cartilage","Bone","Chitin","Keratin"],
+       ["What is the largest moon in our solar system?","Ganymede","Titan","Callisto","Io"],
+       ["What is absolute zero in Celsius?","-273.15\u00b0C","-100\u00b0C","-459.67\u00b0C","-200\u00b0C"],
+       ["Which protein carries oxygen in red blood cells?","Hemoglobin","Insulin","Keratin","Collagen"],
+       ["What is the atomic number of carbon?","6","12","8","4"],
+       ["Which planet has the shortest day?","Jupiter","Saturn","Mercury","Earth"],
+       ["Which element has the chemical symbol Pb?","Lead","Platinum","Palladium","Phosphorus"],
+       ["Which part of the brain mainly controls balance?","Cerebellum","Cerebrum","Medulla","Hypothalamus"]]},
+  history:{name:"History", blurb:"Dead people and dates",
+    e:[["Who was the first President of the United States?","George Washington","Abraham Lincoln","Thomas Jefferson","John Adams"],
+       ["In which country are the Pyramids of Giza?","Egypt","Mexico","Peru","Iraq"],
+       ["Who was the first person to walk on the Moon?","Neil Armstrong","Buzz Aldrin","Yuri Gagarin","John Glenn"],
+       ["Which country is home to the Great Wall?","China","Japan","Mongolia","India"],
+       ["Who was Britain's Prime Minister for most of World War II?","Winston Churchill","Neville Chamberlain","Clement Attlee","Margaret Thatcher"],
+       ["Which famous wall fell in 1989?","The Berlin Wall","Hadrian's Wall","The Great Wall","The Western Wall"],
+       ["Which ship sank on its maiden voyage in 1912?","Titanic","Lusitania","Britannic","Queen Mary"],
+       ["Which U.S. President was shot at Ford's Theatre?","Abraham Lincoln","John F. Kennedy","James Garfield","William McKinley"],
+       ["Which ancient civilization built the Colosseum?","The Romans","The Greeks","The Egyptians","The Persians"],
+       ["Which French emperor was defeated at Waterloo?","Napoleon Bonaparte","Louis XIV","Charlemagne","Louis XVI"],
+       ["In what year did Columbus first reach the Americas?","1492","1488","1500","1519"],
+       ["Who gave the famous \u201cI Have a Dream\u201d speech?","Martin Luther King Jr.","Malcolm X","Frederick Douglass","John Lewis"],
+       ["Who refused to give up her bus seat in Montgomery in 1955?","Rosa Parks","Harriet Tubman","Ruby Bridges","Coretta Scott King"],
+       ["In 1776, America declared independence from which country?","Great Britain","France","Spain","The Netherlands"],
+       ["Which boy pharaoh's tomb was discovered in 1922?","Tutankhamun","Ramesses II","Khufu","Akhenaten"],
+       ["Which English king had six wives?","Henry VIII","Henry V","Edward VI","Richard III"],
+       ["Which city was hit by the first atomic bomb used in war?","Hiroshima","Nagasaki","Tokyo","Kyoto"],
+       ["In what year did the 9/11 attacks take place?","2001","1999","2000","2003"],
+       ["Which Greek city-state is famous for its 300 warriors?","Sparta","Athens","Corinth","Thebes"],
+       ["Which seafaring raiders came from Scandinavia?","The Vikings","The Celts","The Huns","The Saxons"]],
+    m:[["In which year did World War II end?","1945","1944","1946","1939"],
+       ["Which Roman city was buried by Vesuvius in AD 79?","Pompeii","Carthage","Troy","Ostia"],
+       ["Who was the first woman to win a Nobel Prize?","Marie Curie","Ada Lovelace","Florence Nightingale","Rosalind Franklin"],
+       ["Which country gave the Statue of Liberty to the USA?","France","United Kingdom","Spain","Italy"],
+       ["What ship carried the Pilgrims to America in 1620?","The Mayflower","The Santa Maria","The Endeavour","The Beagle"],
+       ["Which British monarch reigned for 70 years?","Elizabeth II","Victoria","Elizabeth I","George III"],
+       ["Who was the first human to travel into space?","Yuri Gagarin","Alan Shepard","John Glenn","Buzz Aldrin"],
+       ["Genghis Khan founded which empire?","The Mongol Empire","The Ottoman Empire","The Persian Empire","The Byzantine Empire"],
+       ["In what year did World War I begin?","1914","1912","1916","1918"],
+       ["Whose assassination sparked World War I?","Archduke Franz Ferdinand","Tsar Nicholas II","Kaiser Wilhelm II","Otto von Bismarck"],
+       ["Which U.S. President resigned over Watergate?","Richard Nixon","Gerald Ford","Lyndon Johnson","Jimmy Carter"],
+       ["Which French queen was guillotined in 1793?","Marie Antoinette","Catherine de' Medici","Jos\u00e9phine","Eleanor of Aquitaine"],
+       ["In what year did the D-Day landings take place?","1944","1942","1943","1945"],
+       ["Who wrote the 95 Theses in 1517?","Martin Luther","John Calvin","Erasmus","Thomas Cranmer"],
+       ["Who was known as \u201cthe Lady with the Lamp\u201d?","Florence Nightingale","Clara Barton","Edith Cavell","Mary Seacole"],
+       ["Who was the first Emperor of Rome?","Augustus","Julius Caesar","Nero","Caligula"],
+       ["Which Ancient Wonder stood in Alexandria?","The Lighthouse","The Colossus","The Hanging Gardens","The Great Pyramid"],
+       ["Which U.S. President made the Louisiana Purchase?","Thomas Jefferson","George Washington","John Adams","James Monroe"],
+       ["Who was Britain's first female Prime Minister?","Margaret Thatcher","Theresa May","Barbara Castle","Shirley Williams"],
+       ["Which Carthaginian general crossed the Alps with elephants?","Hannibal","Spartacus","Scipio","Hamilcar"]],
+    h:[["The shortest war in history (under an hour) was between Britain and\u2026","Zanzibar","Portugal","Iceland","Tonga"],
+       ["Who was the last active pharaoh of ancient Egypt?","Cleopatra VII","Nefertiti","Ramesses II","Tutankhamun"],
+       ["In what year did the French Revolution begin?","1789","1776","1799","1812"],
+       ["Which explorer set out to lead the first circumnavigation of the globe?","Ferdinand Magellan","Vasco da Gama","Christopher Columbus","Francis Drake"],
+       ["Who was U.S. President during the Cuban Missile Crisis?","John F. Kennedy","Dwight Eisenhower","Lyndon Johnson","Richard Nixon"],
+       ["What was the first artificial satellite called?","Sputnik 1","Explorer 1","Vostok 1","Telstar"],
+       ["In what year did Constantinople fall to the Ottomans?","1453","1389","1415","1492"],
+       ["In which 1066 battle was King Harold II killed?","Battle of Hastings","Battle of Stamford Bridge","Battle of Agincourt","Battle of Bosworth"],
+       ["Which ruler was buried with the Terracotta Army?","Qin Shi Huang","Liu Bang","Sun Yat-sen","Wu Zetian"],
+       ["In what year was Magna Carta sealed?","1215","1066","1314","1415"],
+       ["Who was the Aztec ruler when Cort\u00e9s arrived in 1519?","Moctezuma II","Atahualpa","Pachacuti","T\u00fapac Amaru"],
+       ["Who was the last Tsar of Russia?","Nicholas II","Alexander III","Peter the Great","Ivan the Terrible"],
+       ["What was the code name for Germany's 1941 invasion of the USSR?","Operation Barbarossa","Operation Overlord","Operation Sea Lion","Operation Market Garden"],
+       ["Which U.S. President died just 31 days into his term?","William Henry Harrison","James Garfield","Zachary Taylor","John Tyler"],
+       ["Which city was the capital of the Inca Empire?","Cusco","Lima","Quito","Machu Picchu"],
+       ["Which English queen is known as the \u201cNine Days' Queen\u201d?","Lady Jane Grey","Mary I","Anne Boleyn","Catherine Howard"],
+       ["Which Byzantine emperor built the Hagia Sophia in 537?","Justinian I","Constantine I","Theodosius II","Heraclius"],
+       ["In what year was the Berlin Wall built?","1961","1949","1956","1968"],
+       ["Who was crowned Emperor by the Pope on Christmas Day, 800?","Charlemagne","Otto I","Charles V","Frederick Barbarossa"],
+       ["Which Mongol ruler founded China's Yuan dynasty?","Kublai Khan","Genghis Khan","\u00d6gedei Khan","Tamerlane"]]},
+  geography:{name:"Geography", blurb:"Maps, capitals, rivers",
+    e:[["What is the capital of France?","Paris","Lyon","Marseille","Nice"],
+       ["Which is the largest ocean?","Pacific","Atlantic","Indian","Arctic"],
+       ["On which continent is Kenya?","Africa","Asia","South America","Oceania"],
+       ["Which U.S. state is the Sunshine State?","Florida","California","Arizona","Hawaii"],
+       ["Which country do kangaroos come from?","Australia","New Zealand","South Africa","Brazil"],
+       ["What is the capital of Spain?","Madrid","Barcelona","Seville","Valencia"],
+       ["Which is the longest river in Africa?","The Nile","The Congo","The Niger","The Zambezi"],
+       ["Which country has a maple leaf on its flag?","Canada","Switzerland","Norway","Sweden"],
+       ["What is the capital of Japan?","Tokyo","Kyoto","Osaka","Seoul"],
+       ["What is the largest continent?","Asia","Africa","North America","Europe"],
+       ["Mount Everest is in which mountain range?","The Himalayas","The Andes","The Alps","The Rockies"],
+       ["What is the capital of Germany?","Berlin","Munich","Frankfurt","Hamburg"],
+       ["Which U.S. state is made up entirely of islands?","Hawaii","Alaska","California","Oregon"],
+       ["Which country is shaped like a boot?","Italy","Greece","Portugal","Spain"],
+       ["Which ocean lies between Europe and North America?","Atlantic","Pacific","Indian","Arctic"],
+       ["What is the capital of Egypt?","Cairo","Alexandria","Giza","Luxor"],
+       ["In which country is Rio de Janeiro?","Brazil","Argentina","Portugal","Mexico"],
+       ["What is the coldest continent?","Antarctica","Europe","Asia","North America"],
+       ["Which U.S. city is nicknamed the Big Apple?","New York City","Chicago","Boston","Los Angeles"],
+       ["In which country is the Taj Mahal?","India","Pakistan","Iran","Bangladesh"]],
+    m:[["Which country has the largest population?","India","China","United States","Indonesia"],
+       ["What is the capital of Australia?","Canberra","Sydney","Melbourne","Perth"],
+       ["What is the capital of Canada?","Ottawa","Toronto","Vancouver","Montreal"],
+       ["What is the largest country by area?","Russia","Canada","China","United States"],
+       ["What is the largest hot desert in the world?","Sahara","Gobi","Kalahari","Arabian"],
+       ["What is the smallest country in the world?","Vatican City","Monaco","San Marino","Liechtenstein"],
+       ["What is the capital of Brazil?","Bras\u00edlia","Rio de Janeiro","S\u00e3o Paulo","Salvador"],
+       ["What is the capital of Turkey?","Ankara","Istanbul","Izmir","Antalya"],
+       ["Which river flows through London?","The Thames","The Severn","The Mersey","The Avon"],
+       ["What is the capital of Switzerland?","Bern","Zurich","Geneva","Basel"],
+       ["What is the longest river in South America?","The Amazon","The Paran\u00e1","The Orinoco","The Magdalena"],
+       ["Which strait separates Spain from Morocco?","Strait of Gibraltar","Strait of Hormuz","Strait of Messina","The Bosphorus"],
+       ["What is the largest U.S. state by area?","Alaska","Texas","California","Montana"],
+       ["What is the highest mountain in Africa?","Kilimanjaro","Mount Kenya","Mount Elgon","Mount Meru"],
+       ["In which country is Machu Picchu?","Peru","Bolivia","Chile","Ecuador"],
+       ["The shores of which sea are the lowest land on Earth?","The Dead Sea","The Caspian Sea","The Red Sea","The Aral Sea"],
+       ["What is the capital of Argentina?","Buenos Aires","Santiago","Montevideo","C\u00f3rdoba"],
+       ["Reykjav\u00edk is the capital of which country?","Iceland","Norway","Finland","Denmark"],
+       ["The Gal\u00e1pagos Islands belong to which country?","Ecuador","Peru","Chile","Colombia"],
+       ["What is the largest island in the world?","Greenland","Borneo","New Guinea","Madagascar"]],
+    h:[["What is the capital of New Zealand?","Wellington","Auckland","Christchurch","Queenstown"],
+       ["Which country has the most islands?","Sweden","Indonesia","Philippines","Greece"],
+       ["Which country has the most pyramids?","Sudan","Egypt","Mexico","Ethiopia"],
+       ["What is the capital of Mongolia?","Ulaanbaatar","Astana","Bishkek","Tashkent"],
+       ["Which river flows through Baghdad?","Tigris","Euphrates","Nile","Jordan"],
+       ["Lake Titicaca sits on the border of Peru and\u2026","Bolivia","Chile","Ecuador","Argentina"],
+       ["What is the capital of Morocco?","Rabat","Casablanca","Marrakesh","Fez"],
+       ["What is the capital of Nigeria?","Abuja","Lagos","Kano","Ibadan"],
+       ["Which country is completely surrounded by South Africa?","Lesotho","Eswatini","Botswana","Namibia"],
+       ["What is the largest lake in Africa?","Lake Victoria","Lake Tanganyika","Lake Malawi","Lake Chad"],
+       ["What is the deepest lake in the world?","Lake Baikal","Lake Tanganyika","Lake Superior","Crater Lake"],
+       ["Transylvania is a region of which country?","Romania","Hungary","Bulgaria","Serbia"],
+       ["What is the capital of Vietnam?","Hanoi","Ho Chi Minh City","Da Nang","Hu\u1ebf"],
+       ["What is the world's longest continental mountain range?","The Andes","The Rockies","The Himalayas","The Urals"],
+       ["Liechtenstein is wedged between Switzerland and\u2026","Austria","Germany","Italy","France"],
+       ["The Atacama Desert lies mostly in which country?","Chile","Peru","Argentina","Bolivia"],
+       ["What is the capital of Pakistan?","Islamabad","Karachi","Lahore","Peshawar"],
+       ["Addis Ababa is the capital of which country?","Ethiopia","Eritrea","Kenya","Somalia"],
+       ["Which strait separates Asia from North America?","Bering Strait","Davis Strait","Bass Strait","Strait of Magellan"],
+       ["Which river flows through Vienna, Budapest and Belgrade?","The Danube","The Rhine","The Elbe","The Vistula"]]},
+  sports:{name:"Sports", blurb:"Balls, bats and bragging",
+    e:[["How many players does a soccer team have on the pitch?","11","9","10","12"],
+       ["In which sport would you do a slam dunk?","Basketball","Volleyball","Tennis","Rugby"],
+       ["How many rings are on the Olympic flag?","5","4","6","7"],
+       ["Which sport is played at Wimbledon?","Tennis","Golf","Cricket","Polo"],
+       ["In bowling, what is it called when you knock down every pin with one ball?","A strike","A spare","A split","A turkey"],
+       ["How many points is a touchdown worth?","6","3","7","5"],
+       ["How many holes are in a standard round of golf?","18","9","12","24"],
+       ["In which sport do you hit a shuttlecock?","Badminton","Squash","Table tennis","Volleyball"],
+       ["What colour jersey does the Tour de France leader wear?","Yellow","Green","Red","White"],
+       ["What is the NFL's championship game called?","The Super Bowl","The World Series","The Final Four","The Grand Final"],
+       ["Usain Bolt is famous for which sport?","Sprinting","Swimming","Cycling","Long jump"],
+       ["How often are the Summer Olympics held?","Every 4 years","Every 2 years","Every 3 years","Every 5 years"],
+       ["In tennis, what is a score of zero called?","Love","Nil","Duck","Zip"],
+       ["What is it called when one player scores three goals in a game?","A hat trick","A triple play","A treble","A grand slam"],
+       ["How many points is a free throw worth in basketball?","1","2","3","4"],
+       ["In which sport would you hit a home run?","Baseball","Cricket","Rugby","Golf"],
+       ["Tiger Woods is famous for which sport?","Golf","Tennis","Cricket","Polo"],
+       ["In which sport do players use a cue?","Pool","Croquet","Curling","Polo"],
+       ["What kind of race is the Kentucky Derby?","Horse racing","Car racing","Rowing","Cycling"],
+       ["What does a referee show to send a soccer player off?","A red card","A yellow card","A green card","A blue card"]],
+    m:[["Who won the 2022 FIFA World Cup?","Argentina","France","Brazil","Croatia"],
+       ["How long is a marathon?","26.2 miles","24.8 miles","26 miles","27.5 miles"],
+       ["Who has won the most Olympic gold medals?","Michael Phelps","Usain Bolt","Carl Lewis","Simone Biles"],
+       ["In golf, what is one stroke under par called?","Birdie","Eagle","Bogey","Albatross"],
+       ["How many players per team are on a basketball court?","5","6","7","4"],
+       ["What is a perfect score in ten-pin bowling?","300","200","250","350"],
+       ["Which country hosted the 2016 Summer Olympics?","Brazil","Japan","China","Great Britain"],
+       ["How many players per side are on the ice in hockey, incl. the goalie?","6","5","7","11"],
+       ["Which boxer called himself \"The Greatest\"?","Muhammad Ali","Joe Frazier","Mike Tyson","George Foreman"],
+       ["In tennis, what is the score after deuce if the server wins the point?","Advantage","Game","Set point","Love-all"],
+       ["How many minutes is a regulation soccer match?","90","80","100","120"],
+       ["Which F1 team's cars are famously red?","Ferrari","McLaren","Mercedes","Williams"],
+       ["How many points is a field goal worth in the NFL?","3","1","2","4"],
+       ["What is the highest possible score with three darts?","180","150","160","200"],
+       ["Which city is home to the NBA's Celtics?","Boston","Chicago","Philadelphia","New York"],
+       ["In golf, what is two strokes under par on a hole called?","Eagle","Albatross","Condor","Birdie"],
+       ["Which country hosted the 2010 FIFA World Cup?","South Africa","Nigeria","Egypt","Morocco"],
+       ["How many players does a baseball team have in the field?","9","8","10","11"],
+       ["Which sport uses the terms \"stone\", \"sheet\" and \"house\"?","Curling","Lawn bowls","Shuffleboard","Bocce"],
+       ["Which country is tennis star Rafael Nadal from?","Spain","Argentina","Italy","Portugal"]],
+    h:[["What is the diameter of a basketball hoop?","18 inches","16 inches","20 inches","22 inches"],
+       ["Which golfer is nicknamed The Golden Bear?","Jack Nicklaus","Arnold Palmer","Tiger Woods","Gary Player"],
+       ["How many balls are in an over in cricket?","6","5","8","10"],
+       ["Which city hosted the first modern Olympics in 1896?","Athens","Paris","London","Rome"],
+       ["Which tennis Grand Slam is played on clay?","French Open","Wimbledon","US Open","Australian Open"],
+       ["Who has scored the most career points in NBA history?","LeBron James","Kareem Abdul-Jabbar","Michael Jordan","Kobe Bryant"],
+       ["Which country won the first FIFA World Cup in 1930?","Uruguay","Argentina","Brazil","Italy"],
+       ["Which horse won the US Triple Crown in 1973?","Secretariat","Seabiscuit","Man o' War","Affirmed"],
+       ["Which team won the first Super Bowl?","Green Bay Packers","Kansas City Chiefs","Dallas Cowboys","New York Jets"],
+       ["Who scored the infamous \"Hand of God\" goal?","Diego Maradona","Pel\u00e9","Lionel Messi","Mario Kempes"],
+       ["What is the maximum break in standard snooker?","147","150","155","180"],
+       ["Who scored the first perfect 10 in Olympic gymnastics?","Nadia Com\u0103neci","Olga Korbut","Mary Lou Retton","Simone Biles"],
+       ["Which city hosted the 1992 Summer Olympics?","Barcelona","Atlanta","Seoul","Sydney"],
+       ["What nationality was F1 legend Ayrton Senna?","Brazilian","Argentine","Portuguese","Spanish"],
+       ["Who won tennis's calendar \"Golden Slam\" in 1988?","Steffi Graf","Martina Navratilova","Monica Seles","Chris Evert"],
+       ["What was Muhammad Ali's birth name?","Cassius Clay","Joe Louis Barrow","Floyd Patterson","Sonny Liston"],
+       ["In which country is the Le Mans 24 Hours race held?","France","Belgium","Germany","Italy"],
+       ["How long is a cricket pitch?","22 yards","20 yards","24 yards","26 yards"],
+       ["Jesse Owens won four golds at which Olympics?","Berlin 1936","London 1948","Los Angeles 1932","Paris 1924"],
+       ["Who first ran a mile in under four minutes?","Roger Bannister","Sebastian Coe","Steve Prefontaine","Jesse Owens"]]},
+  food:{name:"Food & Drink", blurb:"Fitting, given the occasion",
+    e:[["What is the main ingredient in guacamole?","Avocado","Lime","Pea","Cucumber"],
+       ["Which country gave the world pizza?","Italy","Greece","France","USA"],
+       ["Which fruit is wine usually made from?","Grapes","Apples","Plums","Cherries"],
+       ["What is sushi often wrapped in?","Seaweed","Rice paper","Lettuce","Tofu skin"],
+       ["What kind of food is cheddar?","Cheese","Bread","Sausage","Pickle"],
+       ["Which drink is brewed from barley, hops and water?","Beer","Wine","Cider","Vodka"],
+       ["What is the main ingredient in an omelette?","Eggs","Milk","Flour","Cheese"],
+       ["Which spirit goes in a Pi\u00f1a Colada?","Rum","Vodka","Tequila","Gin"],
+       ["French fries are made from which vegetable?","Potatoes","Carrots","Parsnips","Turnips"],
+       ["Which country is famous for tacos?","Mexico","Spain","Peru","Brazil"],
+       ["Which drink is made from fermented apples?","Cider","Mead","Perry","Kombucha"],
+       ["Which fast-food chain sells the Big Mac?","McDonald's","Burger King","Wendy's","KFC"],
+       ["What is tofu made from?","Soybeans","Rice","Chickpeas","Wheat"],
+       ["What are dried plums called?","Prunes","Raisins","Dates","Figs"],
+       ["What colour of wine is Merlot?","Red","White","Ros\u00e9","Orange"],
+       ["Which lettuce is used in a classic Caesar salad?","Romaine","Iceberg","Spinach","Arugula"],
+       ["What does a sommelier specialise in?","Wine","Cheese","Beer","Coffee"],
+       ["A Mimosa is sparkling wine mixed with what?","Orange juice","Apple juice","Peach pur\u00e9e","Cranberry juice"],
+       ["What is the Japanese dish of thin slices of raw fish?","Sashimi","Tempura","Ramen","Udon"],
+       ["What kind of food is a baguette?","Bread","Cake","Pastry","Cheese"]],
+    m:[["Which spirit goes in a classic Margarita?","Tequila","Rum","Vodka","Gin"],
+       ["What is the main ingredient in hummus?","Chickpeas","Lentils","Fava beans","White beans"],
+       ["Real Champagne comes from which country?","France","Italy","Spain","Germany"],
+       ["Which rice dish comes from Valencia?","Paella","Risotto","Jambalaya","Biryani"],
+       ["What is the base spirit of a Mojito?","White rum","Gin","Tequila","Vodka"],
+       ["What makes a Bloody Mary red?","Tomato juice","Cranberry juice","Grenadine","Beet juice"],
+       ["Which nut is used to make marzipan?","Almonds","Hazelnuts","Pistachios","Walnuts"],
+       ["Which Italian sparkling wine goes in an Aperol Spritz?","Prosecco","Champagne","Cava","Cr\u00e9mant"],
+       ["Which country does Guinness come from?","Ireland","Scotland","England","Wales"],
+       ["Gin, Campari and sweet vermouth make which cocktail?","Negroni","Manhattan","Americano","Martinez"],
+       ["Which spirit is made from sugar cane or molasses?","Rum","Vodka","Gin","Tequila"],
+       ["What herb is the main ingredient in classic pesto?","Basil","Parsley","Mint","Coriander"],
+       ["Feta cheese comes from which country?","Greece","Italy","Spain","France"],
+       ["What gives a Cosmopolitan its pink colour?","Cranberry juice","Grenadine","Pomegranate juice","Raspberry syrup"],
+       ["Gouda cheese comes from which country?","Netherlands","Belgium","Denmark","Switzerland"],
+       ["What is the spicy green paste served with sushi?","Wasabi","Miso","Matcha","Shiso"],
+       ["\u00c9clairs are made from which type of pastry?","Choux","Puff","Filo","Shortcrust"],
+       ["What is the main ingredient in baba ganoush?","Eggplant","Chickpeas","Zucchini","Lentils"],
+       ["Rum, lime juice and sugar make which classic cocktail?","Daiquiri","Mojito","Caipirinha","Mai Tai"],
+       ["What is Korea's famous fermented cabbage dish?","Kimchi","Bulgogi","Bibimbap","Gochujang"]],
+    h:[["What is the most expensive spice by weight?","Saffron","Vanilla","Cardamom","Black pepper"],
+       ["Which grain is sake brewed from?","Rice","Barley","Wheat","Millet"],
+       ["Which plant is tequila made from?","Blue agave","Aloe vera","Prickly pear","Yucca"],
+       ["What does IPA stand for?","India Pale Ale","Imperial Pale Ale","International Pale Ale","Irish Pale Ale"],
+       ["Vodka, ginger beer and lime make which cocktail?","Moscow Mule","Dark 'n' Stormy","Cosmopolitan","Kamikaze"],
+       ["Which country drinks the most beer per person?","Czech Republic","Germany","Ireland","Belgium"],
+       ["Chablis wine is made from which grape?","Chardonnay","Sauvignon Blanc","Riesling","Pinot Gris"],
+       ["Which Italian anise liqueur is served with coffee beans?","Sambuca","Limoncello","Amaretto","Frangelico"],
+       ["Rioja wine comes from which country?","Spain","Portugal","Italy","Argentina"],
+       ["Which cheese is used in classic tiramisu?","Mascarpone","Ricotta","Burrata","Gorgonzola"],
+       ["Haggis is traditionally cooked in what?","A sheep's stomach","A pig's bladder","A cow's intestine","A goat's stomach"],
+       ["Ch\u00e2teauneuf-du-Pape is a wine from which French region?","Rh\u00f4ne","Bordeaux","Burgundy","Loire"],
+       ["Calvados is a brandy made mainly from which fruit?","Apples","Pears","Plums","Cherries"],
+       ["Champagne and cr\u00e8me de cassis make which cocktail?","Kir Royale","French 75","Bellini","Mimosa"],
+       ["What is the main flavour of the liqueur Frangelico?","Hazelnut","Almond","Walnut","Chestnut"],
+       ["Which Mexican agave spirit is known for its smoky taste?","Mezcal","Pisco","Cacha\u00e7a","Aquavit"],
+       ["A Bellini is Prosecco mixed with which fruit pur\u00e9e?","Peach","Apricot","Strawberry","Mango"],
+       ["What does the cooking term \"al dente\" literally mean?","To the tooth","To the bite","To the fork","To the heat"],
+       ["Chateaubriand is cut from which part of the beef?","Tenderloin","Sirloin","Ribeye","Rump"],
+       ["Which Scottish island is famous for peaty, smoky whisky?","Islay","Skye","Orkney","Arran"]]},
+  potter:{name:"Harry Potter", blurb:"Mischief managed",
+    e:[["What is the name of Harry's owl?","Hedwig","Errol","Pigwidgeon","Hermes"],
+       ["Which house is Harry sorted into?","Gryffindor","Slytherin","Ravenclaw","Hufflepuff"],
+       ["What position does Harry play in Quidditch?","Seeker","Keeper","Chaser","Beater"],
+       ["What is the name of Hagrid's three-headed dog?","Fluffy","Fang","Norbert","Buckbeak"],
+       ["Who is headmaster of Hogwarts for most of the series?","Albus Dumbledore","Severus Snape","Minerva McGonagall","Horace Slughorn"],
+       ["What is the name of the wizarding bank?","Gringotts","Ollivanders","Borgin and Burkes","Flourish and Blotts"],
+       ["What is the name of Harry's cousin?","Dudley","Draco","Dennis","Dean"],
+       ["What sport do wizards play on broomsticks?","Quidditch","Gobstones","Wizard chess","Exploding Snap"],
+       ["What shape is Harry's scar?","A lightning bolt","A star","A crescent moon","A skull"],
+       ["Who is Harry's godfather?","Sirius Black","Remus Lupin","Rubeus Hagrid","Arthur Weasley"],
+       ["What is the name of Ron's pet rat?","Scabbers","Crookshanks","Trevor","Errol"],
+       ["What kind of creature is Dobby?","A house-elf","A goblin","A gnome","A pixie"],
+       ["What is the name of Hermione's cat?","Crookshanks","Mrs Norris","Scabbers","Hedwig"],
+       ["Which house is Draco Malfoy in?","Slytherin","Gryffindor","Ravenclaw","Hufflepuff"],
+       ["Which wizard sweets come in every flavour?","Bertie Bott's Beans","Chocolate Frogs","Fizzing Whizzbees","Sugar Quills"],
+       ["Who teaches Potions in Harry's first year?","Severus Snape","Minerva McGonagall","Quirinus Quirrell","Filius Flitwick"],
+       ["What do wizards call non-magical people?","Muggles","Mudbloods","Purebloods","Half-bloods"],
+       ["Who is the half-giant gamekeeper at Hogwarts?","Rubeus Hagrid","Argus Filch","Grawp","Olympe Maxime"],
+       ["What street do the Dursleys live on?","Privet Drive","Diagon Alley","Grimmauld Place","Spinner's End"],
+       ["Who kills Dumbledore?","Severus Snape","Draco Malfoy","Bellatrix Lestrange","Lord Voldemort"]],
+    m:[["Which platform does the Hogwarts Express leave from?","9\u00be","7\u00bd","10\u00bc","8\u00be"],
+       ["What form does Harry's Patronus take?","A stag","A doe","An otter","A phoenix"],
+       ["Which spell disarms an opponent?","Expelliarmus","Stupefy","Petrificus Totalus","Expecto Patronum"],
+       ["What is the Weasley family home called?","The Burrow","Shell Cottage","Grimmauld Place","Spinner's End"],
+       ["Which creatures guard Azkaban?","Dementors","Inferi","Boggarts","Thestrals"],
+       ["What is Voldemort's real name?","Tom Marvolo Riddle","Tom Morfin Riddle","Thomas Gaunt Riddle","Marvolo Gaunt"],
+       ["What kind of creature is Buckbeak?","A hippogriff","A thestral","A griffin","A centaur"],
+       ["What does the spell \u201cLumos\u201d do?","Lights the wand tip","Unlocks doors","Levitates objects","Repairs objects"],
+       ["What phrase wipes the Marauder's Map blank?","Mischief managed","Nox","Finite Incantatem","Map concealed"],
+       ["What is the name of Hagrid's baby dragon?","Norbert","Fluffy","Aragog","Fang"],
+       ["What lets Hermione attend extra classes in year 3?","A Time-Turner","A Pensieve","A Remembrall","A Portkey"],
+       ["Who is the Half-Blood Prince?","Severus Snape","Tom Riddle","Harry Potter","Horace Slughorn"],
+       ["What is the Weasley twins' joke shop called?","Weasleys' Wizard Wheezes","Zonko's Joke Shop","Gambol and Japes","Honeydukes"],
+       ["Who is Gryffindor's house ghost?","Nearly Headless Nick","The Fat Friar","The Bloody Baron","The Grey Lady"],
+       ["What does the Mirror of Erised show?","Your deepest desire","Your future","Your worst fear","Your true self"],
+       ["Which family did Dobby serve before he was freed?","The Malfoys","The Blacks","The Crouches","The Lestranges"],
+       ["What is the Killing Curse?","Avada Kedavra","Crucio","Imperio","Sectumsempra"],
+       ["Who teaches Defence Against the Dark Arts in year 5?","Dolores Umbridge","Gilderoy Lockhart","Remus Lupin","Alastor Moody"],
+       ["What position does Ron play in Quidditch?","Keeper","Seeker","Beater","Chaser"],
+       ["How many points is catching the Snitch worth?","150","100","50","200"]],
+    h:[["What is Hermione's middle name?","Jean","Jane","Rose","Anne"],
+       ["What does Hermione's S.P.E.W. stand for?","Society for the Promotion of Elfish Welfare","Society for the Protection of Elves Worldwide","Support for the Preservation of Elf Workers","Society for the Prevention of Elf Wrongs"],
+       ["What is the core of Harry's wand?","Phoenix feather","Dragon heartstring","Unicorn hair","Thestral tail hair"],
+       ["How many Horcruxes did Voldemort make on purpose?","6","7","5","8"],
+       ["What is the name of Neville's toad?","Trevor","Hermes","Crookshanks","Scabbers"],
+       ["Which potion is known as \u201cliquid luck\u201d?","Felix Felicis","Amortentia","Veritaserum","Polyjuice Potion"],
+       ["What is the name of Ron's tiny owl from Sirius?","Pigwidgeon","Errol","Hermes","Hedwig"],
+       ["What is the name of Dumbledore's brother?","Aberforth","Ariana","Gellert","Elphias"],
+       ["What does Dumbledore leave Harry in his will?","The first Snitch he caught","The Deluminator","The Tales of Beedle the Bard","The Elder Wand"],
+       ["Which Hogsmeade pub does Aberforth run?","The Hog's Head","The Three Broomsticks","The Leaky Cauldron","The Hanged Man"],
+       ["What wood is Harry's wand made of?","Holly","Yew","Elder","Vine"],
+       ["What was the name of Voldemort's mother?","Merope Gaunt","Mary Riddle","Eileen Prince","Hepzibah Smith"],
+       ["What was Snape's mother's maiden name?","Prince","Gaunt","Black","Peverell"],
+       ["Which spell does Harry use to slash Draco in the bathroom?","Sectumsempra","Levicorpus","Diffindo","Confringo"],
+       ["What form does Ron's Patronus take?","A Jack Russell terrier","An otter","A hare","A horse"],
+       ["What magazine does Luna's father edit?","The Quibbler","The Daily Prophet","Witch Weekly","The Evening Prophet"],
+       ["Which goblin helps the trio break into Gringotts?","Griphook","Ragnok","Gornuk","Gringott"],
+       ["Which Marauder is \u201cPadfoot\u201d?","Sirius Black","Remus Lupin","Peter Pettigrew","James Potter"],
+       ["Which Quidditch team does Ron support?","Chudley Cannons","Holyhead Harpies","Puddlemere United","Wimbourne Wasps"],
+       ["What is the name of Harry's younger son?","Albus Severus","James Sirius","Albus Remus","Severus James"]]},
+  friends:{name:"Friends", blurb:"Could this BE any harder?",
+    e:[["What is Ross's job?","Paleontologist","Archaeologist","Geologist","Anthropologist"],
+       ["Which instrument does Phoebe play?","Guitar","Piano","Violin","Drums"],
+       ["In which city is Friends set?","New York","Chicago","Boston","Los Angeles"],
+       ["Which of the friends is a chef?","Monica","Rachel","Phoebe","Chandler"],
+       ["What is Joey's famous pickup line?","How you doin'?","We were on a break!","Oh. My. God.","Pivot!"],
+       ["What is Phoebe's most famous song?","Smelly Cat","Crazy Cat","Stinky Dog","Lonely Cat"],
+       ["How are Ross and Monica related?","Brother and sister","Cousins","Exes","Roommates"],
+       ["Who does Monica marry?","Chandler","Richard","Joey","Pete"],
+       ["What does Ross insist about the night with Chloe?","We were on a break!","It was a mistake!","I was drunk!","She kissed me first!"],
+       ["What does Ross yell while moving his couch?","Pivot!","Lift!","Push!","Turn!"],
+       ["What is Joey's job?","Actor","Chef","Lawyer","Teacher"],
+       ["Which friend works as a masseuse?","Phoebe","Rachel","Monica","Janice"],
+       ["What doesn't Joey share?","Food","His TV","His clothes","His recliner"],
+       ["Which girlfriend's catchphrase is \u201cOh. My. God.\u201d?","Janice","Emily","Julie","Kathy"],
+       ["Who does Phoebe marry in season 10?","Mike","David","Gary","Eric"],
+       ["What is Chandler's last name?","Bing","Geller","Tribbiani","Buffay"],
+       ["Where is Rachel about to move in the finale?","Paris","London","Milan","Rome"],
+       ["What was Jennifer Aniston's famous haircut called?","The Rachel","The Monica","The Aniston","The Jen"],
+       ["What is the name of Ross's son?","Ben","Jack","Sam","Max"],
+       ["Whose apartment has the famous purple walls?","Monica's","Joey's","Phoebe's","Ross's"]],
+    m:[["What is the name of Ross's pet monkey?","Marcel","Max","Mojo","Milo"],
+       ["Whose name does Ross say at the altar when marrying Emily?","Rachel","Monica","Julie","Carol"],
+       ["What is Chandler's middle name?","Muriel","Matthew","Michael","Mortimer"],
+       ["Which soap opera does Joey star in?","Days of Our Lives","General Hospital","The Bold and the Beautiful","All My Children"],
+       ["What is the name of Ross's first wife?","Carol","Emily","Susan","Janice"],
+       ["What is Rachel's job at the start of the show?","Waitress","Fashion buyer","Chef","Masseuse"],
+       ["In which city does Ross marry Emily?","London","Paris","Las Vegas","Dublin"],
+       ["What is the name of Joey's agent?","Estelle","Gladys","Ursula","Judy"],
+       ["Phoebe says Rachel is Ross's what?","Lobster","Penguin","Soulmate","Swan"],
+       ["Who is Chandler's creepy roommate after Joey?","Eddie","Gunther","Mr. Heckles","Paolo"],
+       ["Who is the Central Perk barista in love with Rachel?","Gunther","Eddie","Terry","Paolo"],
+       ["What pets do Joey and Chandler have?","A chick and a duck","Two cats","A monkey and a parrot","A dog and a rabbit"],
+       ["Who does Joey play on Days of Our Lives?","Dr. Drake Ramoray","Dr. Mike Hunter","Dr. Kyle Lawson","Dr. Rick Stone"],
+       ["How many times does Ross get divorced?","3","2","4","1"],
+       ["What career does Chandler switch to?","Advertising","Journalism","Teaching","Accounting"],
+       ["Which of Rachel's assistants does she date?","Tag","Paolo","Gavin","Barry"],
+       ["Which friend was overweight as a teenager?","Monica","Rachel","Phoebe","Joey"],
+       ["What is Ross and Monica's dad's name?","Jack","Leonard","Richard","Frank"],
+       ["What does Phoebe give birth to for her brother?","Triplets","Twins","Quadruplets","One baby"],
+       ["What ends up in Rachel's Thanksgiving trifle?","Beef with peas and onions","Tuna and mayonnaise","Chicken and gravy","Ham and mustard"]],
+    h:[["What is the name of Joey's stuffed penguin?","Hugsy","Waddles","Pengy","Mr. Flippers"],
+       ["What is Chandler's actual job?","Statistical analysis and data reconfiguration","Transponster","Financial auditing","IT procurement"],
+       ["What is the name of Phoebe's twin sister?","Ursula","Leslie","Paula","Phyllis"],
+       ["In the big trivia game, what do the girls lose to the guys?","Their apartment","$100","The chick and the duck","Knicks tickets"],
+       ["Who performs the Friends theme, \u201cI'll Be There for You\u201d?","The Rembrandts","Hootie & the Blowfish","Matchbox Twenty","Barenaked Ladies"],
+       ["What is the name of Ross and Rachel's daughter?","Emma","Erica","Ella","Emily"],
+       ["What is Chandler's dad's Vegas show called?","Viva Las Gaygas","Boys Will Be Girls","Vegas in Heels","Les Girls Galore"],
+       ["What is Rachel's hairless cat called?","Mrs. Whiskerson","Mr. Whiskers","Mrs. Purrington","Princess Fluffy"],
+       ["Who does Brad Pitt play in Friends?","Will Colbert","Paul Stevens","Tag Jones","Eddie Menuek"],
+       ["How many sisters does Joey have?","7","5","6","8"],
+       ["What fake name does Phoebe use?","Regina Phalange","Ken Adams","Holly Danger","Monana"],
+       ["What is \u201cthe Moist Maker\u201d in Ross's sandwich?","Gravy-soaked bread","Cranberry sauce","Extra mayonnaise","Stuffing"],
+       ["What does Ross call \u201ca state of total awareness\u201d?","Unagi","Sashimi","Wasabi","Tamago"],
+       ["Which Monica boyfriend takes up Ultimate Fighting?","Pete","Richard","Fun Bobby","Ethan"],
+       ["What does Ross play at Phoebe's wedding?","Bagpipes","Keytar","Violin","Accordion"],
+       ["Whose old apartment does Ross move into?","Ugly Naked Guy's","Mr. Heckles'","Gunther's","Eddie's"],
+       ["What is Joey's childhood imaginary friend called?","Maurice","Marcus","Morris","Murray"],
+       ["How many pages is Rachel's letter to Ross?","18","10","12","25"],
+       ["What is Joey's TV show with a robot co-star?","Mac and C.H.E.E.S.E.","Shutter Speed","Law & Order","Days of Our Lives"],
+       ["Who plays Monica's boyfriend Richard?","Tom Selleck","Bruce Willis","Brad Pitt","George Clooney"]]},
+  office:{name:"The Office", blurb:"That's what she said",
+    e:[["Which city is the Dunder Mifflin branch in?","Scranton","Stamford","Nashua","Utica"],
+       ["Who is regional manager for most of the show?","Michael Scott","Dwight Schrute","Jim Halpert","Andy Bernard"],
+       ["What does Dwight grow on his farm?","Beets","Potatoes","Corn","Pumpkins"],
+       ["Who does Jim marry?","Pam Beesly","Karen Filippelli","Angela Martin","Kelly Kapoor"],
+       ["What does Jim put Dwight's stapler in?","Jell-O","Pudding","Cereal","A block of ice"],
+       ["What are Michael's office awards called?","The Dundies","The Scrantons","The Mifflies","The Michaels"],
+       ["Dwight is \u201cAssistant ___ the Regional Manager\u201d?","to","of","for","under"],
+       ["Who is the receptionist at the start of the show?","Pam","Kelly","Erin","Angela"],
+       ["Which HR rep does Michael hate?","Toby","Oscar","Creed","Gabe"],
+       ["Who does Jim impersonate: \u201cBears. Beets. Battlestar\u2026\u201d?","Dwight","Michael","Andy","Stanley"],
+       ["What puzzle does Stanley do in meetings?","Crossword","Sudoku","Word search","Jigsaw"],
+       ["What does Andy call Jim?","Big Tuna","Big Fish","Tuna Man","Jimbo"],
+       ["Which cat-loving accountant is famously uptight?","Angela","Phyllis","Meredith","Kelly"],
+       ["Who is Michael's true love by the end of his run?","Holly","Jan","Carol","Pam"],
+       ["What is Ryan's job when the show starts?","The temp","Receptionist","Warehouse foreman","HR rep"],
+       ["Which warehouse worker is Pam engaged to early on?","Roy","Darryl","Toby","Hank"],
+       ["Who does Michael hit with his car?","Meredith","Phyllis","Stanley","Toby"],
+       ["What does Jim do after pranking Dwight?","Looks at the camera","Takes a bow","Winks at Dwight","High-fives Kevin"],
+       ["Who does Angela secretly date?","Dwight","Andy","Oscar","Toby"],
+       ["What is Dwight's family beet farm called?","Schrute Farms","Beet Acres","Schrute Hill","Dwight's Den"]],
+    m:[["What is the name of Angela's cat that Dwight puts in the freezer?","Sprinkles","Bandit","Princess Lady","Garbage"],
+       ["Who is Michael's boss at corporate (and on-off girlfriend)?","Jan Levinson","Holly Flax","Carol Stills","Karen Filippelli"],
+       ["What does Michael call his breakaway company?","The Michael Scott Paper Company","Prestige Direct","Scott & Co. Paper","Great Scott Paper"],
+       ["Who famously spills a giant pot of chili?","Kevin Malone","Stanley Hudson","Creed Bratton","Oscar Martinez"],
+       ["What is Michael's spy character in Threat Level Midnight?","Michael Scarn","Mike Danger","Agent Scott","Michael Shadow"],
+       ["What is Michael's famous comeback line?","That's what she said","Bears. Beets. Battlestar Galactica.","Identity theft is not a joke","I declare bankruptcy!"],
+       ["Who becomes regional manager in season 8?","Andy","Dwight","Jim","Ryan"],
+       ["Who manages the Stamford branch?","Josh Porter","Charles Miner","Robert California","Jo Bennett"],
+       ["Where does Jim propose to Pam?","At a gas station","On the office roof","At the Dundies","At Niagara Falls"],
+       ["Where do Jim and Pam get married?","Niagara Falls","Scranton","Philadelphia","New York"],
+       ["Which Michael alter ego describes prison life?","Prison Mike","Date Mike","Ping","Michael Klump"],
+       ["What is Jan's candle company called?","Serenity by Jan","Jan's Scents","Scranton Wicks","Levinson Lights"],
+       ["What is Jim and Pam's daughter's name?","Cecelia","Astrid","Melissa","Erin"],
+       ["Which company buys Dunder Mifflin in season 6?","Sabre","Staples","Wernham Hogg","Prestige Direct"],
+       ["Which branch merges into Scranton in season 3?","Stamford","Utica","Nashua","Buffalo"],
+       ["Who says \u201cI'm not superstitious, but I am a little stitious\u201d?","Michael","Dwight","Andy","Kelly"],
+       ["Who is Kelly's on-off boyfriend?","Ryan","Toby","Kevin","Creed"],
+       ["Who does Will Ferrell play?","Deangelo Vickers","Robert California","Charles Miner","Nellie Bertram"],
+       ["Which city does Pam go to for art school?","New York","Philadelphia","Boston","Chicago"],
+       ["Why does Michael drive into a lake?","He follows his GPS","He's texting Jan","A bee stings him","He's chasing Dwight"]],
+    h:[["What is Stanley's favourite day of the year?","Pretzel Day","Casual Friday","Cake Day","Taco Tuesday"],
+       ["What is the name of Dwight's cousin on the farm?","Mose","Zeke","Jeb","Nate"],
+       ["What was Andy's a cappella group at Cornell?","Here Comes Treble","Treble Makers","Big Red Notes","The Cornell Chordsmen"],
+       ["What is the name of Kevin's Police tribute band?","Scrantonicity","Kevin and the Malones","Dunder Funk","Paper Police"],
+       ["What does Michael burn his foot on?","A George Foreman grill","A curling iron","A waffle iron","A toaster"],
+       ["What is the name of the building's security guard?","Hank","Frank","Roy","Gabe"],
+       ["What is Dwight's middle name?","Kurt","Karl","Mose","Frederick"],
+       ["Which Dundie does Pam win in season 2?","Whitest Sneakers","Spicy Curry","Tight-Ass","Busiest Beaver"],
+       ["Who plays Charles Miner?","Idris Elba","Will Ferrell","James Spader","Ricky Gervais"],
+       ["What did Michael promise \u201cScott's Tots\u201d?","Their college tuition","A car each","A job at Dunder Mifflin","A trip to Paris"],
+       ["What department is Creed in?","Quality assurance","Supplier relations","Customer service","Accounting"],
+       ["What is Michael's middle name?","Gary","George","Gregory","Gerald"],
+       ["Where does Toby move in season 4?","Costa Rica","Panama","Puerto Rico","Brazil"],
+       ["Which small rival do Michael and Dwight spy on?","Prince Family Paper","Hammermill Paper","Staples","Wernham Hogg"],
+       ["Who was Jan's assistant who wrote \u201cThat One Night\u201d?","Hunter","Hank","Nate","Clark"],
+       ["What is Angela and Dwight's son's name?","Phillip","Mose","Dwight Jr.","Robert"],
+       ["Which restaurant bans Pam after the Dundies?","Chili's","Applebee's","Hooters","Olive Garden"],
+       ["What does Andy call himself?","The Nard Dog","Big Tuna","Plop","The Scranton Strangler"],
+       ["What eco-superhero does Dwight dress up as?","Recyclops","Captain Planet","Green Man","Eco-Man"],
+       ["What is Erin's real first name?","Kelly","Kathy","Karen","Carol"]]},
+  marvel:{name:"Marvel", blurb:"Avengers, assemble",
+    e:[["What is Captain America's shield made of?","Vibranium","Adamantium","Titanium","Uru"],
+       ["Who is Thor's adopted brother?","Loki","Odin","Heimdall","Hela"],
+       ["What is Peter Parker's superhero name?","Spider-Man","Ant-Man","Iron Man","Hawkeye"],
+       ["Which hero is secretly Tony Stark?","Iron Man","Captain America","Doctor Strange","Black Panther"],
+       ["What colour is the Hulk?","Green","Grey","Blue","Purple"],
+       ["Who wields the hammer Mjolnir?","Thor","Hulk","Hawkeye","Black Panther"],
+       ["Which Avenger is a master archer?","Hawkeye","Black Widow","Falcon","Ant-Man"],
+       ["What is the Hulk's human name?","Bruce Banner","Steve Rogers","Peter Quill","Scott Lang"],
+       ["What is Captain America's real name?","Steve Rogers","Bucky Barnes","Sam Wilson","Tony Stark"],
+       ["Which Guardian of the Galaxy is a walking tree?","Groot","Rocket","Drax","Mantis"],
+       ["Which hero is secretly Scott Lang?","Ant-Man","Falcon","Hawkeye","Star-Lord"],
+       ["What is Black Panther's real name?","T'Challa","M'Baku","N'Jobu","Killmonger"],
+       ["What kind of animal is Rocket?","A raccoon","A fox","A badger","An otter"],
+       ["Who raises Peter Parker in the MCU?","Aunt May","Aunt Mary","Aunt Martha","Aunt Maggie"],
+       ["What colour is Thanos's skin?","Purple","Blue","Green","Grey"],
+       ["What does Thanos wear to hold the Infinity Stones?","A gauntlet","A crown","A ring","A belt"],
+       ["Who is Tony Stark's love interest, later his wife?","Pepper Potts","Natasha Romanoff","Maria Hill","Gamora"],
+       ["Which character has a metal arm?","Winter Soldier","Falcon","Hawkeye","War Machine"],
+       ["Who is Thor's father?","Odin","Heimdall","Surtur","Volstagg"],
+       ["Which hero flies using mechanical wings?","Falcon","Vision","War Machine","Hawkeye"]],
+    m:[["Which villain snaps away half of all life?","Thanos","Ultron","Loki","Red Skull"],
+       ["What is Black Widow's real name?","Natasha Romanoff","Wanda Maximoff","Yelena Belova","Maria Hill"],
+       ["What is Thor's home realm called?","Asgard","Midgard","Jotunheim","Vanaheim"],
+       ["Who plays Nick Fury?","Samuel L. Jackson","Laurence Fishburne","Don Cheadle","Idris Elba"],
+       ["Which movie started the Marvel Cinematic Universe?","Iron Man","The Incredible Hulk","Thor","Captain America: The First Avenger"],
+       ["Which Infinity Stone was hidden on Vormir?","Soul Stone","Mind Stone","Power Stone","Time Stone"],
+       ["What is the name of Thor's new axe in Infinity War?","Stormbreaker","Gungnir","Jarnbjorn","Hofund"],
+       ["Which robot villain does Tony Stark create?","Ultron","Whiplash","Yellowjacket","Ronan"],
+       ["Which Infinity Stone sits in Vision's forehead?","Mind Stone","Soul Stone","Power Stone","Reality Stone"],
+       ["What is Star-Lord's real name?","Peter Quill","Peter Parker","Scott Lang","Quentin Beck"],
+       ["Who is Thor's sister, the Goddess of Death?","Hela","Frigga","Sif","Valkyrie"],
+       ["Which fictional country is Age of Ultron's finale set in?","Sokovia","Latveria","Madripoor","Genosha"],
+       ["What is Captain Marvel's real name?","Carol Danvers","Maria Rambeau","Monica Rambeau","Wendy Lawson"],
+       ["Who is Peter Parker's best friend in Homecoming?","Ned Leeds","Flash Thompson","Harry Osborn","Eddie Brock"],
+       ["Which alien army does Loki lead in The Avengers (2012)?","The Chitauri","The Kree","The Skrulls","The Dark Elves"],
+       ["Who proves worthy and lifts Mjolnir in Endgame?","Captain America","Iron Man","Hulk","Black Panther"],
+       ["How much does Morgan Stark say she loves her dad?","3000","1000","A million","Infinity"],
+       ["Who is revealed as the Winter Soldier?","Bucky Barnes","Sam Wilson","Brock Rumlow","Alexander Pierce"],
+       ["Who plays Thor?","Chris Hemsworth","Chris Evans","Chris Pratt","Tom Hiddleston"],
+       ["Who sacrifices herself on Vormir in Endgame?","Black Widow","Nebula","Scarlet Witch","Captain Marvel"]],
+    h:[["What was Tony Stark's AI assistant before FRIDAY?","J.A.R.V.I.S.","E.D.I.T.H.","K.A.R.E.N.","H.O.M.E.R."],
+       ["What are Tony Stark's last words in Endgame?","I am Iron Man","Love you 3000","We won","Avengers, assemble"],
+       ["How many years pass between the snap and the time heist?","5","3","2","10"],
+       ["In the first Guardians of the Galaxy, what is Star-Lord's ship called?","The Milano","The Benatar","The Sanctuary","The Bus"],
+       ["Which song does Star-Lord dance to in the opening of Guardians of the Galaxy?","Come and Get Your Love","Hooked on a Feeling","Ain't No Mountain High Enough","Mr. Blue Sky"],
+       ["What is Doctor Strange's first name?","Stephen","Simon","Samuel","Sebastian"],
+       ["What does Peter name his suit's AI in Homecoming?","Karen","EDITH","FRIDAY","Jocasta"],
+       ["What does EDITH stand for in Far From Home?","Even Dead, I'm The Hero","Every Device In The House","Elite Defense Intel Tech Hub","Enhanced Drone Interface Tool"],
+       ["Who is Star-Lord's biological father?","Ego","Yondu","Stakar","Kraglin"],
+       ["What do the Avengers eat in The Avengers' end-credits?","Shawarma","Tacos","Pizza","Falafel"],
+       ["Who is the actor posing as the Mandarin in Iron Man 3?","Trevor Slattery","Aldrich Killian","Justin Hammer","Ivan Vanko"],
+       ["Which villain wears the Iron Monger suit?","Obadiah Stane","Justin Hammer","Ivan Vanko","Aldrich Killian"],
+       ["On which planet does Thor fight Hulk in Ragnarok?","Sakaar","Xandar","Knowhere","Contraxia"],
+       ["What is Thanos's home planet?","Titan","Xandar","Morag","Vormir"],
+       ["Who is the main villain of Guardians of the Galaxy (2014)?","Ronan the Accuser","Ego","Yon-Rogg","Taserface"],
+       ["Which Infinity Stone is inside the Tesseract?","Space Stone","Mind Stone","Power Stone","Time Stone"],
+       ["Which Infinity Stone is the Aether?","Reality Stone","Power Stone","Space Stone","Soul Stone"],
+       ["What kind of creature is Goose in Captain Marvel?","A Flerken","A Skrull","A Kree","A Krylorian"],
+       ["Who played Bruce Banner in The Incredible Hulk (2008)?","Edward Norton","Mark Ruffalo","Eric Bana","Josh Brolin"],
+       ["To which year do Cap and Tony go for the Tesseract in Endgame?","1970","1945","1962","1985"]]},
+  disney:{name:"Disney & Pixar", blurb:"Childhood, revisited",
+    e:[["What is the name of the cowboy in Toy Story?","Woody","Buzz","Jessie","Bullseye"],
+       ["What kind of fish is Nemo?","Clownfish","Blue tang","Angelfish","Pufferfish"],
+       ["What does Cinderella leave behind at the ball?","A glass slipper","A tiara","A glove","A necklace"],
+       ["Who grants Aladdin three wishes?","The Genie","Jafar","Iago","Abu"],
+       ["Which robot does WALL-E fall in love with?","EVE","Ava","Ivy","Wanda"],
+       ["What does Mike Wazowski have only one of?","An eye","A horn","An arm","A tooth"],
+       ["Who is Simba's evil uncle?","Scar","Rafiki","Zazu","Pumbaa"],
+       ["What kind of animal is Dumbo?","An elephant","A mouse","A hippo","A rhino"],
+       ["What is Buzz Lightyear's catchphrase?","To infinity and beyond!","Reach for the sky!","Up, up and away!","Shoot for the stars!"],
+       ["What kind of animal is Bambi?","A deer","A rabbit","A fox","A skunk"],
+       ["In Frozen, what is Elsa's sister called?","Anna","Ariel","Aurora","Rapunzel"],
+       ["Which song does Elsa sing while building her ice palace?","Let It Go","Into the Unknown","Show Yourself","For the First Time in Forever"],
+       ["Who sings \u201cHakuna Matata\u201d with Pumbaa?","Timon","Zazu","Rafiki","Nala"],
+       ["What colour is Sulley in Monsters, Inc.?","Blue with purple spots","Green with blue spots","Purple with pink spots","Orange with red spots"],
+       ["Which princess has extremely long magic hair?","Rapunzel","Cinderella","Belle","Jasmine"],
+       ["What is Lightning McQueen's tow-truck best friend called?","Mater","Doc Hudson","Luigi","Guido"],
+       ["What flower is kept under glass in Beauty and the Beast?","A rose","A tulip","A lily","A daisy"],
+       ["What happens to Pinocchio's nose when he lies?","It grows","It glows","It shrinks","It sneezes"],
+       ["What food does Winnie the Pooh love most?","Honey","Cake","Jam","Carrots"],
+       ["Which fairy is Peter Pan's companion?","Tinker Bell","Fauna","Merryweather","Silvermist"]],
+    m:[["What is the name of the rat in Ratatouille?","Remy","Emile","Linguini","Gusteau"],
+       ["What is the name of the bear in The Jungle Book?","Baloo","Bagheera","Shere Khan","Kaa"],
+       ["What does Ariel give up to become human?","Her voice","Her hair","Her memories","Her sister"],
+       ["In Monsters, Inc., what powers the city at first?","Children's screams","Laughter","Lightning","Candy"],
+       ["What is the name of Mulan's dragon sidekick?","Mushu","Cri-Kee","Khan","Shan Yu"],
+       ["Who voices Woody?","Tom Hanks","Tim Allen","Billy Crystal","Robin Williams"],
+       ["What is the Incredibles' family surname?","Parr","Best","Frost","Pine"],
+       ["Who is the sea witch in The Little Mermaid?","Ursula","Maleficent","Yzma","Cruella"],
+       ["What is Ariel's crab friend called?","Sebastian","Flounder","Scuttle","Triton"],
+       ["What is Jafar's parrot called in Aladdin?","Iago","Abu","Rajah","Zazu"],
+       ["What is the demigod's name in Moana?","Maui","Tamatoa","Tui","Heihei"],
+       ["Who keeps Rapunzel locked in the tower in Tangled?","Mother Gothel","Lady Tremaine","Maleficent","Yzma"],
+       ["Who is the cuddly-bear villain of Toy Story 3?","Lotso","Stinky Pete","Zurg","Big Baby"],
+       ["What is Woody's horse called?","Bullseye","Buttercup","Trixie","Slinky"],
+       ["What is Miguel's dog called in Coco?","Dante","Pepita","Chicharr\u00f3n","Ernesto"],
+       ["Who curses Aurora in Sleeping Beauty?","Maleficent","Ursula","Cruella","Lady Tremaine"],
+       ["Which film features the song \u201cBe Our Guest\u201d?","Beauty and the Beast","Aladdin","The Little Mermaid","Pinocchio"],
+       ["What does \u201cHakuna Matata\u201d mean?","No worries","Good luck","Be happy","Stay strong"],
+       ["In Inside Out, which emotion is blue?","Sadness","Fear","Disgust","Anger"],
+       ["What is the piggy bank called in Toy Story?","Hamm","Rex","Wheezy","Slinky"]],
+    h:[["In Up, what is the talking dog called?","Dug","Doug","Alpha","Kevin"],
+       ["What is the name of the toy-torturing neighbour in Toy Story?","Sid","Al","Stinky Pete","Lotso"],
+       ["Who is the food critic in Ratatouille?","Anton Ego","Auguste Gusteau","Skinner","Colette"],
+       ["What is the candlestick called in Beauty and the Beast?","Lumi\u00e8re","Cogsworth","Chip","Fifi"],
+       ["What address does Dory keep repeating?","P. Sherman, 42 Wallaby Way, Sydney","P. Sherman, 24 Wallaby Way, Sydney","P. Sheldon, 42 Kangaroo Lane, Sydney","B. Sherman, 42 Wallaby Road, Melbourne"],
+       ["What is Riley's imaginary friend called in Inside Out?","Bing Bong","Ding Dong","Bubbles","Zip Zap"],
+       ["What does Edna Mode refuse to put on hero suits?","Capes","Masks","Boots","Belts"],
+       ["What is the sloth's name at the Zootopia DMV?","Flash","Clawhauser","Yax","Finnick"],
+       ["Which chameleon-like monster is Sulley's rival?","Randall Boggs","Henry Waternoose","Fungus","Needleman"],
+       ["What does Russell name the giant bird in Up?","Kevin","Gerald","Polly","Snipe"],
+       ["What is Chef Gusteau's motto in Ratatouille?","Anyone can cook!","Cooking is love!","Taste is everything!","Every dish has a soul!"],
+       ["What is Jasmine's pet tiger called?","Rajah","Abu","Shere Khan","Bagheera"],
+       ["What does Scuttle call a fork in The Little Mermaid?","A dinglehopper","A snarfblat","A thingamabob","A whosit"],
+       ["Who steals Woody in Toy Story 2?","Al","Sid","Stinky Pete","Lenny"],
+       ["What is the shark called who says \u201cFish are friends\u201d?","Bruce","Anchor","Chum","Jaws"],
+       ["What is Kristoff's reindeer called in Frozen?","Sven","Oaken","Hans","Marshmallow"],
+       ["What is Lightning McQueen's racing number?","95","43","86","51"],
+       ["Which of these is one of Scar's hyenas?","Shenzi","Sarabi","Sarafina","Kiara"],
+       ["In Encanto, which sister has super strength?","Luisa","Isabela","Mirabel","Dolores"],
+       ["Which explorer is Carl's childhood hero in Up?","Charles Muntz","Edgar Sterling","Arthur Fremont","Henry Pettigrew"]]}
+};
+const DIFF = {e:{label:"Easy", base:100}, m:{label:"Medium", base:200}, h:{label:"Hard", base:300}};
+const PREFIX = "lastcall-live-v1-";
+const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const rand = a => a[Math.floor(Math.random()*a.length)];
+const shuffle = a => { a=[...a]; for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];} return a; };
+const uid = () => Math.random().toString(36).slice(2, 10);
+const store = {
+  get(k){ try{ return JSON.parse(localStorage.getItem(k) || "null"); }catch(e){ return null; } },
+  set(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} },
+  del(k){ try{ localStorage.removeItem(k); }catch(e){} }
+};
+const ordinal = n => n + (["th","st","nd","rd"][(n % 100 - 20) % 10] || ["th","st","nd","rd"][n % 100] || "th");
+const hasPeer = typeof Peer !== "undefined";
+
+let role = null;      // null | "host" | "player"
+let H = null;         // host state (saved)
+let P = null;         // player state
+let peer = null;
+const conns = new Map();   // host: pid -> connection
+let tickId = null;
+let confirmEnd = false;
+let homeErr = "";
+
+/* =================== ANSWER MATCHING =================== */
+// Forgiving check for typed answers: ignores case, accents, punctuation and "the/a/an",
+// allows a few typos (scaled to length), accepts surnames / key words, and matches numbers by value.
+function norm(t){
+  return String(t || "").replace(/\u00be/g, " 3/4").replace(/\u00bd/g, " 1/2").replace(/\u00bc/g, " 1/4")
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
+    .replace(/(\d),(\d)/g, "$1$2").replace(/&/g, " and ")
+    .replace(/[^a-z0-9./ ]+/g, " ").replace(/\s+/g, " ").trim().replace(/^(the|a|an) /, "");
+}
+function lev(a, b){
+  if (a === b) return 0;
+  const m = a.length, n = b.length; if (!m) return n; if (!n) return m;
+  let pp = null, prev = Array.from({length:n+1}, (_, j) => j);
+  for (let i = 1; i <= m; i++){
+    const cur = [i];
+    for (let j = 1; j <= n; j++){
+      cur[j] = Math.min(prev[j] + 1, cur[j-1] + 1, prev[j-1] + (a[i-1] === b[j-1] ? 0 : 1));
+      if (pp && i > 1 && j > 1 && a[i-1] === b[j-2] && a[i-2] === b[j-1]) cur[j] = Math.min(cur[j], pp[j-2] + 1);
+    }
+    pp = prev; prev = cur;
+  }
+  return prev[n];
+}
+const tol = len => len <= 3 ? 0 : len <= 8 ? 1 : Math.max(2, Math.floor(len * 0.15));
+const squash = t => t.replace(/ /g, "");
+// word by word when the word counts line up ("Aunt May" is not "Aunt Mary"), otherwise as one string
+function close(t, a){
+  const tw = t.split(" "), aw = a.split(" ");
+  if (tw.length === aw.length) return aw.every((w, i) => lev(tw[i], w) <= tol(w.length));
+  return lev(squash(t), squash(a)) <= tol(squash(a).length);
+}
+const NUM = /\d+(\.\d+)?/g;
+const nums = t => (t.match(NUM) || []).map(Number);
+const words = t => t.replace(NUM, " ").replace(/\s+/g, " ").trim();
+function rawMatch(t, a){
+  if (!t || !a) return false;
+  const an = nums(a), tn = nums(t);
+  if (an.length && tn.length){
+    // numbers must match exactly; any words typed with them must fit too ("8 minutes", not "8 seconds")
+    if (tn.length !== an.length || tn.some((x, i) => x !== an[i])) return false;
+    const tw = words(t), aw = words(a);
+    return !tw || !aw || close(tw, aw) || aw.includes(tw) || (tw.length >= 3 && !tw.includes(" ") && aw.split(" ")[0].startsWith(tw.slice(0, 3)));
+  }
+  if (close(t, a)) return true;
+  if (a.length >= 4 && t.includes(a)) return true;
+  // a key part of the answer is enough, e.g. "Spielberg" for "Steven Spielberg"
+  const aw = a.split(" "), total = squash(a).length, tcount = t.split(" ").length;
+  for (let i = 0; i < aw.length; i++) for (let j = i + 1; j <= aw.length; j++){
+    if (i === 0 && j === aw.length) continue;
+    if (j - i !== tcount) continue;
+    const span = aw.slice(i, j).join(" "), len = squash(span).length;
+    if (len >= 4 && len >= total * 0.4 && close(t, span)) return true;
+  }
+  return false;
+}
+function isMatch(typed, answer, wrongs){
+  const t = norm(typed), a = norm(answer);
+  if (!rawMatch(t, a)) return false;
+  // reject a guess that is really one of the wrong options ("Tuesday" when the answer is "Thursday")
+  const d = lev(squash(t), squash(a));
+  return !(wrongs || []).some(w => { const n = norm(w); return n && n !== a && (rawMatch(t, n) && lev(squash(t), squash(n)) <= d); });
+}
+// Questions that only make sense with the options on screen are skipped in typed mode
+const typeable = ([q, a]) => !/which of these|which of the following/i.test(q) && a.length <= 30 && a.split(/\s+/).length <= 4;
+
+/* =================== HOST =================== */
+const defaultSettings = () => ({cats:Object.keys(CATS), diff:"mixed", count:15, timer:30, drinks:true, mode:"typed"});
+const saveHost = () => store.set("lastcall-live-host", H);
+
+function hostCreate(resume){
+  role = "host";
+  if (!resume){
+    const prev = store.get("lastcall-live-host");
+    H = {code:"", status:"connecting", settings: {...defaultSettings(), ...(prev?.settings || {})}, players:{}, phase:"lobby", qn:0, deck:[], answers:{}, results:{}, qStartedAt:0, qEndsAt:0};
+    H.code = Array.from({length:4}, () => rand(CODE_CHARS)).join("");
+  }
+  H.status = "connecting";
+  Object.values(H.players).forEach(p => p.online = false);
+  openHostPeer(resume ? 6 : 0);
+  render();
+}
+
+function openHostPeer(retries){
+  if (peer) peer.destroy();
+  peer = new Peer(PREFIX + H.code);
+  peer.on("open", () => { H.status = "online"; saveHost(); render(); });
+  peer.on("connection", conn => {
+    conn.on("data", msg => hostOnMsg(conn, msg));
+    conn.on("close", () => { if (conn.pid && conns.get(conn.pid) === conn){ conns.delete(conn.pid); if (H.players[conn.pid]) H.players[conn.pid].online = false; render(); } });
+  });
+  peer.on("disconnected", () => { if (!peer.destroyed) peer.reconnect(); });
+  peer.on("error", err => {
+    if (err.type === "unavailable-id"){
+      if (retries > 0){ H.status = "connecting"; render(); setTimeout(() => openHostPeer(retries - 1), 3000); }
+      else if (H.phase === "lobby" && !Object.keys(H.players).length){ H.code = Array.from({length:4}, () => rand(CODE_CHARS)).join(""); openHostPeer(0); }
+      else { H.status = "error"; H.error = "That room code is still in use. Wait a minute and press Resume again."; render(); }
+    } else if (["network","server-error","socket-error","socket-closed","browser-incompatible"].includes(err.type)){
+      H.status = "error"; H.error = err.type === "browser-incompatible" ? "This browser can't host. Try Chrome, Edge or Safari." : "Can't reach the game server. Check the internet connection, then press Retry."; render();
+    }
+  });
+}
+
+function hostOnMsg(conn, msg){
+  if (!msg || typeof msg !== "object") return;
+  if (msg.t === "join"){
+    const pid = String(msg.pid || "").slice(0, 20) || uid();
+    let name = String(msg.name || "").trim().slice(0, 16) || "Player";
+    let p = H.players[pid];
+    if (!p){
+      if (H.phase !== "lobby" && Object.keys(H.players).length >= 40) return;
+      const taken = new Set(Object.values(H.players).map(x => x.name.toLowerCase()));
+      let n = name, i = 2; while (taken.has(n.toLowerCase())) n = `${name} ${i++}`;
+      p = H.players[pid] = {name:n, score:0, joinedAt:Date.now()};
+    }
+    p.online = true;
+    const old = conns.get(pid); if (old && old !== conn) old.close();
+    conn.pid = pid; conns.set(pid, conn);
+    saveHost(); broadcast(); render();
+  }
+  if (msg.t === "answer" && conn.pid && H.players[conn.pid]){
+    const pid = conn.pid;
+    if (H.phase !== "question" || msg.qn !== H.qn || H.answers[pid]) return;
+    if (H.qEndsAt && Date.now() > H.qEndsAt + 750) return;
+    if (H.mode === "typed"){
+      const text = String(msg.text || "").trim().slice(0, 60);
+      if (!text) return;
+      H.answers[pid] = {text, ms: Date.now() - H.qStartedAt};
+    } else {
+      const i = +msg.i; if (!(i >= 0 && i < 4)) return;
+      H.answers[pid] = {i, ms: Date.now() - H.qStartedAt};
+    }
+    saveHost(); sendView(pid); render();
+    const online = Object.keys(H.players).filter(id => H.players[id].online);
+    if (online.length && online.every(id => H.answers[id])) setTimeout(() => { if (H.phase === "question") reveal(); }, 600);
+  }
+}
+
+function ranking(){ return Object.entries(H.players).map(([pid, p]) => ({pid, ...p})).sort((a,b) => b.score - a.score || a.joinedAt - b.joinedAt); }
+function rankOf(pid){ const me = H.players[pid].score; return 1 + Object.values(H.players).filter(p => p.score > me).length; }
+
+function viewFor(pid){
+  const p = H.players[pid], q = H.deck[H.qn];
+  const v = {t:"view", code:H.code, phase:H.phase, name:p.name, score:p.score, rank:rankOf(pid), players:Object.keys(H.players).length,
+    qn:H.qn, count:H.deck.length || H.settings.count, drinks:H.settings.drinks};
+  if (q && (H.phase === "question" || H.phase === "reveal")){
+    v.mode = H.mode;
+    v.q = {cat:CATS[q.cat].name, d:q.d, text:q.q, options:H.mode === "typed" ? null : q.options};
+    const mine = H.answers[pid];
+    v.my = mine ? (H.mode === "typed" ? mine.text : mine.i) : null;
+  }
+  if (H.phase === "question" && H.qEndsAt){ v.remaining = H.qEndsAt - Date.now(); v.timer = H.settings.timer; }
+  if (H.phase === "reveal"){ const r = H.results[pid] || {correct:false, pts:0}; v.result = {ai:q.ai, answer:q.a, correct:r.correct, pts:r.pts}; }
+  if (H.phase === "final") v.top = ranking().slice(0, 5).map(x => ({name:x.name, score:x.score}));
+  return v;
+}
+function sendView(pid){ const c = conns.get(pid); if (c && c.open) try{ c.send(viewFor(pid)); }catch(e){} }
+function broadcast(){ conns.forEach((_, pid) => sendView(pid)); }
+
+function split(n){ const e = Math.round(n/3), h = Math.round(n/3); return [...Array(e).fill("e"), ...Array(n-e-h).fill("m"), ...Array(h).fill("h")]; }
+function buildDeck(){
+  const s = H.settings, used = {}, out = [];
+  const diffs = s.diff === "mixed" ? split(s.count) : Array(s.count).fill(s.diff);
+  let cats = [];
+  for (const d of diffs){
+    if (!cats.length) cats = shuffle(s.cats);
+    const cat = cats.shift();
+    for (const dd of [d, "m", "e", "h"]){
+      const k = cat + dd; used[k] = used[k] || [];
+      const free = CATS[cat][dd].map((_,i) => i).filter(i => !used[k].includes(i) && (s.mode !== "typed" || typeable(CATS[cat][dd][i])));
+      if (!free.length) continue;
+      const i = rand(free); used[k].push(i);
+      const [q, a, ...w] = CATS[cat][dd][i]; const options = shuffle([a, ...w]);
+      out.push({cat, d:dd, q, a, options, ai:options.indexOf(a)}); break;
+    }
+  }
+  return out;
+}
+
+function hostStart(){
+  Object.values(H.players).forEach(p => p.score = 0);
+  H.mode = H.settings.mode; H.deck = buildDeck(); H.qn = 0;
+  startQuestion();
+}
+function startQuestion(){
+  H.phase = "question"; H.answers = {}; H.results = {};
+  H.qStartedAt = Date.now(); H.qEndsAt = H.settings.timer ? H.qStartedAt + H.settings.timer * 1000 : 0;
+  saveHost(); broadcast(); render(); startTick();
+}
+function reveal(){
+  if (H.phase !== "question") return;
+  const q = H.deck[H.qn], T = H.settings.timer * 1000;
+  for (const [pid, p] of Object.entries(H.players)){
+    const a = H.answers[pid];
+    const correct = !!a && (H.mode === "typed" ? isMatch(a.text, q.a, q.options.filter(o => o !== q.a)) : a.i === q.ai);
+    const speed = T && a ? Math.max(0, 1 - a.ms / T) : 1;
+    const pp = Math.round(DIFF[q.d].base * (T ? 0.5 + 0.5 * speed : 1));
+    const pts = correct ? pp : 0;
+    p.score += pts; H.results[pid] = {correct, pts, pp, answered:!!a, text:a ? a.text : null};
+  }
+  H.phase = "reveal"; stopTick(); saveHost(); broadcast(); render();
+}
+// game master override for typed answers: tap a player's answer to accept or reject it
+function judge(pid){
+  const r = H.results[pid], p = H.players[pid];
+  if (H.phase !== "reveal" || !r || !r.answered || !p) return;
+  r.correct = !r.correct;
+  r.pts = r.correct ? r.pp : 0;
+  p.score += r.correct ? r.pp : -r.pp;
+  saveHost(); broadcast(); render();
+}
+function hostNext(){
+  if (H.qn + 1 >= H.deck.length){ H.phase = "final"; saveHost(); broadcast(); render(); return; }
+  H.qn++; startQuestion();
+}
+function hostToLobby(){ H.phase = "lobby"; H.deck = []; H.qn = 0; H.answers = {}; H.results = {}; Object.values(H.players).forEach(p => p.score = 0); saveHost(); broadcast(); render(); }
+
+function startTick(){
+  stopTick();
+  tickId = setInterval(() => {
+    if (role === "host"){
+      if (H.phase !== "question" || !H.qEndsAt){ stopTick(); return; }
+      const left = H.qEndsAt - Date.now();
+      paintTimer(left, H.settings.timer * 1000);
+      if (left <= 0) reveal();
+    } else if (role === "player"){
+      const v = P.view;
+      if (!v || v.phase !== "question" || !P.deadline){ stopTick(); return; }
+      paintTimer(P.deadline - Date.now(), v.timer * 1000);
+    }
+  }, 100);
+}
+function stopTick(){ if (tickId){ clearInterval(tickId); tickId = null; } }
+function paintTimer(left, total){
+  left = Math.max(0, left);
+  const f = $("#tfill"), n = $("#tnum");
+  if (f){ f.style.width = (left / total * 100) + "%"; f.classList.toggle("low", left < 5000); }
+  if (n) n.textContent = Math.ceil(left / 1000);
+}
+
+/* =================== PLAYER =================== */
+function playerJoin(code, name){
+  code = code.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 4);
+  name = name.trim().slice(0, 16);
+  if (code.length !== 4){ homeErr = "Room codes are 4 letters."; return render(); }
+  if (!name){ homeErr = "Add your name so the scoreboard knows who you are."; return render(); }
+  homeErr = "";
+  const saved = store.get("lastcall-live-player");
+  const pid = saved && saved.code === code ? saved.pid : uid();
+  store.set("lastcall-live-player", {code, name, pid});
+  role = "player";
+  P = {code, name, pid, status:"connecting", view:null, conn:null, ever:false, deadline:0};
+  if (peer) peer.destroy();
+  peer = new Peer();
+  peer.on("open", playerConnect);
+  peer.on("disconnected", () => { if (!peer.destroyed) peer.reconnect(); });
+  peer.on("error", err => {
+    if (err.type === "peer-unavailable"){
+      if (P.ever){ P.status = "lost"; render(); setTimeout(playerConnect, 3000); }
+      else { P.status = "notfound"; render(); }
+    } else if (["network","server-error","socket-error","socket-closed"].includes(err.type)){
+      P.status = "lost"; render(); setTimeout(() => { if (peer && peer.disconnected && !peer.destroyed) peer.reconnect(); }, 3000);
+    } else if (err.type === "browser-incompatible"){ P.status = "error"; render(); }
+  });
+  render();
+}
+function playerConnect(){
+  if (role !== "player" || !peer || peer.destroyed) return;
+  if (peer.disconnected){ peer.reconnect(); setTimeout(playerConnect, 2000); return; }
+  const conn = peer.connect(PREFIX + P.code, {reliable:true});
+  P.conn = conn;
+  conn.on("open", () => { P.status = "connected"; P.ever = true; conn.send({t:"join", pid:P.pid, name:P.name}); render(); });
+  conn.on("data", msg => {
+    if (!msg || msg.t !== "view") return;
+    const prev = P.view; P.view = msg;
+    if (msg.phase === "question" && msg.remaining != null) P.deadline = Date.now() + msg.remaining;
+    if (msg.phase === "question" && msg.remaining != null && !(prev && prev.phase === "question" && prev.qn === msg.qn && prev.my === msg.my)) startTick();
+    render();
+  });
+  conn.on("close", () => { if (P.conn !== conn || role !== "player") return; P.status = "lost"; render(); setTimeout(playerConnect, 2500); });
+}
+function playerAnswer(i){
+  const v = P.view;
+  if (!v || v.phase !== "question" || v.my != null || !P.conn?.open) return;
+  v.my = i;
+  try{ P.conn.send({t:"answer", qn:v.qn, i}); }catch(e){}
+  render();
+}
+function playerSendText(text){
+  const v = P.view;
+  text = String(text || "").trim().slice(0, 60);
+  if (!text || !v || v.phase !== "question" || v.my != null || !P.conn?.open) return;
+  v.my = text;
+  try{ P.conn.send({t:"answer", qn:v.qn, text}); }catch(e){}
+  render();
+}
+function leave(){
+  stopTick();
+  if (peer){ peer.destroy(); peer = null; }
+  conns.clear(); role = null; P = null; render();
+}
+
+/* =================== RENDER =================== */
+function render(){
+  const app = $("#app"), where = $("#where"), acts = $("#barActions");
+  if (role === "host") return renderHost(app, where, acts);
+  if (role === "player") return renderPlayer(app, where, acts);
+  where.textContent = ""; acts.innerHTML = "";
+  const saved = store.get("lastcall-live-host"), me = store.get("lastcall-live-player");
+  const hashCode = (location.hash || "").replace(/[^A-Za-z]/g, "").toUpperCase().slice(0, 4);
+  app.innerHTML = `
+  <section class="hero">
+    <h1>Last Call <span>Live</span></h1>
+    <p>Live party trivia. One screen hosts and shows the questions; everyone answers on their own phone. Faster right answers score more.</p>
+  </section>
+  ${hasPeer ? "" : `<p class="banner bad">The multiplayer library didn't load. This page needs an internet connection; reload once you're online.</p>`}
+  <div class="home">
+    <section class="panel">
+      <h3>Join a game</h3>
+      <p class="hint">Get the 4-letter code from the host's screen.</p>
+      <div class="field"><label class="label" for="code">Room code</label><input class="input codeinput" id="code" maxlength="4" autocomplete="off" autocapitalize="characters" value="${esc(hashCode || (me && me.code) || "")}" placeholder="ABCD"></div>
+      <div class="field"><label class="label" for="name">Your name</label><input class="input" id="name" maxlength="16" autocomplete="nickname" value="${esc((me && me.name) || "")}" placeholder="e.g. Sam"></div>
+      ${homeErr ? `<p class="err">${esc(homeErr)}</p>` : ""}
+      <button class="btn big" data-act="join" ${hasPeer ? "" : "disabled"}>Join</button>
+    </section>
+    <section class="panel">
+      <h3>Host a game</h3>
+      <p class="hint">Use this on the laptop or TV everyone can see. You're the game master: you see the questions, the answers and the scores. Players answer on their phones.</p>
+      <button class="btn big" data-act="host" ${hasPeer ? "" : "disabled"}>Host on this screen</button>
+      ${saved && saved.code && Object.keys(saved.players || {}).length ? `<button class="btn ghost" data-act="resumeHost" ${hasPeer ? "" : "disabled"}>Resume room ${esc(saved.code)} (${Object.keys(saved.players).length} players)</button>` : ""}
+    </section>
+  </div>`;
+}
+
+function joinUrl(){
+  if (!/^https?:$/.test(location.protocol)) return "";
+  return location.href.split("#")[0] + "#" + H.code;
+}
+
+function renderHost(app, where, acts){
+  where.textContent = H.phase === "lobby" ? "Lobby" : H.phase === "final" ? "Final scores" : `Question ${H.qn+1} of ${H.deck.length}`;
+  acts.innerHTML = `<span class="tag" title="Room code">Room ${esc(H.code)}</span>` + (H.phase === "lobby" ? `<button class="btn ghost sm" data-act="leave">Close room</button>` :
+    `<button class="btn ${confirmEnd ? "warn" : "ghost"} sm" data-act="endGame">${confirmEnd ? "Tap again to end" : "End game"}</button>`);
+  const status = H.status === "online" ? "" : H.status === "error"
+    ? `<div class="banner bad">${esc(H.error)} <button class="btn sm" data-act="retryHost">Retry</button></div>`
+    : `<div class="banner">Opening room ${esc(H.code)}&hellip;</div>`;
+  const s = H.settings, players = Object.entries(H.players);
+  const online = players.filter(([,p]) => p.online);
+
+  if (H.phase === "lobby"){
+    const url = joinUrl();
+    const chips = (act, opts, cur) => opts.map(([v,l]) => `<button class="chip" data-act="${act}" data-v="${v}" aria-pressed="${String(cur) === String(v)}">${l}</button>`).join("");
+    app.innerHTML = `${status}<div class="host">
+      <section class="stage">
+        <div class="joinbox">
+          <p class="eyebrow">Join on your phone with code</p>
+          <p class="bigcode">${esc(H.code)}</p>
+          <p class="hint" style="font-size:17px">Open Last Call Live, tap <b>Join</b>, type the code and your name.</p>
+          ${url ? `<p class="joinlink">${esc(url)}</p>` : ""}
+        </div>
+        <div style="display:grid;gap:10px"><p class="eyebrow">${online.length} player${online.length === 1 ? "" : "s"} in the room</p>
+          <div class="players">${players.length ? players.map(([,p]) => `<span class="pchip ${p.online ? "" : "off"}">${esc(p.name)}</span>`).join("") : `<span class="hint">Waiting for the first player&hellip;</span>`}</div></div>
+        <div class="actions"><button class="btn big" data-act="start" ${online.length && s.cats.length ? "" : "disabled"}>${online.length ? `Start with ${online.length} player${online.length === 1 ? "" : "s"}` : "Waiting for players"}</button></div>
+      </section>
+      <aside class="rail">
+        <section class="panel">
+          <h2>Game settings</h2>
+          <div><span class="label">Answers</span><div class="seg" style="margin-top:6px">${chips("mode", [["typed","Type it (typos OK)"],["choice","Multiple choice"]], s.mode)}</div></div>
+          <div><span class="label">Questions</span><div class="seg" style="margin-top:6px">${chips("count", [[10,"10"],[15,"15"],[20,"20"],[30,"30"]], s.count)}</div></div>
+          <div><span class="label">Answer time</span><div class="seg" style="margin-top:6px">${chips("timer", [[15,"15s"],[20,"20s"],[30,"30s"],[0,"No limit"]], s.timer)}</div></div>
+          <div><span class="label">Difficulty</span><div class="seg" style="margin-top:6px">${chips("diff", [["mixed","Ramps up"],["e","Easy"],["m","Medium"],["h","Hard"]], s.diff)}</div></div>
+          <div><span class="label">Drinking mode</span><div class="seg" style="margin-top:6px">${chips("drinks", [[true,"Wrong = a sip"],[false,"Off"]], s.drinks)}</div></div>
+        </section>
+        <section class="panel">
+          <h2>Categories</h2>
+          <div class="seg">${Object.entries(CATS).map(([k,c]) => `<button class="chip" data-act="cat" data-v="${k}" aria-pressed="${s.cats.includes(k)}">${esc(c.name)}</button>`).join("")}</div>
+          <div class="seg"><button class="btn ghost sm" data-act="allCats">All</button><button class="btn ghost sm" data-act="noCats">None</button></div>
+        </section>
+      </aside></div>`;
+    return;
+  }
+
+  const board = (deltas) => `<section class="panel"><h2>Leaderboard</h2><ol class="board">${ranking().map((p,i) => {
+      const r = H.results[p.pid];
+      const note = deltas && r ? (r.correct ? `<small class="up">+${r.pts}</small>` : `<small class="miss">${r.answered ? "Wrong" : "No answer"}</small>`) : (!p.online ? `<small class="miss">Disconnected</small>` : "");
+      return `<li><span class="pos">${i+1}</span><span class="nm">${esc(p.name)}${note}</span><span class="sc">${p.score}</span></li>`; }).join("")}</ol></section>`;
+
+  if (H.phase === "final"){
+    const r = ranking(), top = r[0];
+    app.innerHTML = `${status}<div class="host"><section class="stage" style="text-align:center;justify-items:center">
+        <p class="eyebrow">Last call &middot; ${H.deck.length} questions</p>
+        <p class="bigcode" style="font-size:clamp(40px,8vw,90px);letter-spacing:0">${top ? esc(top.name) : "Nobody"}</p>
+        <p class="hint" style="font-size:20px">wins with ${top ? top.score : 0} points.${H.settings.drinks && r.length > 1 ? ` ${esc(r[r.length-1].name)} finished last: take a sip.` : ""}</p>
+        <div class="actions" style="justify-content:center"><button class="btn big" data-act="again">Play again (same players)</button><button class="btn ghost big" data-act="leave">Close room</button></div>
+      </section><aside class="rail">${board(false)}</aside></div>`;
+    return;
+  }
+
+  const q = H.deck[H.qn], isRev = H.phase === "reveal";
+  const counts = [0,0,0,0]; Object.values(H.answers).forEach(a => counts[a.i]++);
+  const answeredN = Object.keys(H.answers).length;
+  const opts = q.options.map((o,i) => `<div class="hopt o${i} ${isRev ? (i === q.ai ? "right" : "dim") : ""}">
+      ${isRev ? `<span class="barfill" style="width:${answeredN ? counts[i] / answeredN * 100 : 0}%"></span>` : ""}
+      <span class="k">${"ABCD"[i]}</span><span>${esc(o)}</span>${isRev ? `<span class="n">${counts[i]}</span>` : ""}</div>`).join("");
+  const typed = H.mode === "typed";
+  let body = `<div class="tags"><span class="tag">${esc(CATS[q.cat].name)}</span><span class="tag diff d-${q.d}">${DIFF[q.d].label} &middot; up to ${DIFF[q.d].base}</span>${typed ? `<span class="tag">Type your answer</span>` : ""}</div>
+      <p class="hq">${esc(q.q)}</p>${typed ? (isRev ? `<p class="bigans">${esc(q.a)}</p>` : "") : `<div class="hopts">${opts}</div>`}`;
+  if (!isRev){
+    body += H.qEndsAt ? `<div class="tline"><div class="track"><div class="fill" id="tfill"></div></div><span class="tnum" id="tnum">${H.settings.timer}</span></div>` : "";
+    body += `<div style="display:grid;gap:8px"><p class="eyebrow">${answeredN} of ${online.length} answered</p>
+      <div class="players">${players.filter(([pid,p]) => p.online || H.answers[pid]).map(([pid,p]) => `<span class="pchip ${H.answers[pid] ? "done" : ""}">${esc(p.name)}</span>`).join("")}</div></div>
+      <div class="actions"><button class="btn" data-act="reveal">Reveal answer now</button></div>`;
+  } else {
+    const missed = players.filter(([pid]) => !H.results[pid]?.correct).map(([,p]) => p.name);
+    if (typed){
+      body += `<div style="display:grid;gap:8px"><p class="eyebrow">What everyone typed &middot; tap one to accept or reject it</p>
+        <div class="judge">${players.map(([pid,p]) => { const r = H.results[pid] || {};
+          if (!r.answered) return `<span class="jchip none"><span class="who">${esc(p.name)}</span><span class="said">no answer</span></span>`;
+          return `<button class="jchip ${r.correct ? "ok" : "no"}" data-act="judge" data-pid="${esc(pid)}"><span class="mark">${r.correct ? "&#10003;" : "&#10007;"}</span><span class="who">${esc(p.name)}</span><span class="said">${esc(r.text)}</span></button>`; }).join("")}</div></div>`;
+    } else body += `<p class="answerline">Answer: <b>${"ABCD"[q.ai]}. ${esc(q.a)}</b></p>`;
+    if (H.settings.drinks) body += missed.length ? `<div class="sips"><b>Take a sip</b><span>${missed.map(esc).join(", ")}</span></div>` : `<div class="banner ok">Everyone got it. Cheers, nobody drinks!</div>`;
+    body += `<div class="actions"><button class="btn big" data-act="next">${H.qn + 1 >= H.deck.length ? "See final scores" : "Next question"}</button></div>`;
+  }
+  app.innerHTML = `${status}<div class="host"><section class="stage">${body}</section><aside class="rail">${board(isRev)}</aside></div>`;
+  if (!isRev && H.qEndsAt){ paintTimer(H.qEndsAt - Date.now(), H.settings.timer * 1000); if (!tickId) startTick(); }
+}
+
+function renderPlayer(app, where, acts){
+  const v = P.view;
+  where.textContent = `Room ${P.code}`;
+  acts.innerHTML = `<button class="btn ghost sm" data-act="leave">Leave</button>`;
+  let banner = "";
+  if (P.status === "connecting") banner = `<div class="banner">Joining room ${esc(P.code)}&hellip;</div>`;
+  if (P.status === "lost") banner = `<div class="banner bad">Connection dropped. Reconnecting&hellip;</div>`;
+  if (P.status === "notfound"){
+    app.innerHTML = `<div class="phone"><div class="pcard"><h2>No game found</h2><p class="hint">There's no open room with code <b>${esc(P.code)}</b>. Check the code on the host's screen and try again.</p><button class="btn big" data-act="leave">Back</button></div></div>`;
+    return;
+  }
+  if (P.status === "error"){
+    app.innerHTML = `<div class="phone"><div class="pcard"><h2>Can't connect</h2><p class="hint">This browser doesn't support live games. Try Chrome or Safari.</p><button class="btn big" data-act="leave">Back</button></div></div>`;
+    return;
+  }
+  if (!v){ app.innerHTML = `<div class="phone">${banner}</div>`; return; }
+  const stats = `<div class="stat"><div><b>${v.score}</b><span>Points</span></div><div><b>${ordinal(v.rank)}</b><span>of ${v.players}</span></div></div>`;
+  let body = "";
+  if (v.phase === "lobby"){
+    body = `<div class="pcard"><p class="eyebrow">You're in</p><h2>${esc(v.name)}</h2><p class="hint">${v.players} player${v.players === 1 ? "" : "s"} in the room. The host will start soon. Keep this screen open.</p></div>`;
+  } else if (v.phase === "question" && v.q){
+    const locked = v.my != null;
+    body = `<div class="pcard" style="text-align:left">
+      <div class="tags"><span class="tag">Q${v.qn+1}/${v.count}</span><span class="tag">${esc(v.q.cat)}</span><span class="tag diff d-${v.q.d}">${DIFF[v.q.d].label}</span></div>
+      <p class="pq">${esc(v.q.text)}</p>
+      ${v.remaining != null ? `<div class="tline"><div class="track"><div class="fill" id="tfill"></div></div><span class="tnum" id="tnum"></span></div>` : ""}
+      ${v.mode === "typed"
+        ? (locked ? `<p class="mine-text">Your answer: <q>${esc(v.my)}</q></p>`
+                  : `<form class="typed" data-form="typed"><input class="input" id="ans" maxlength="60" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Type your answer" aria-label="Your answer"><button class="btn" type="submit">Send</button></form><p class="hint">Small spelling mistakes are fine.</p>`)
+        : `<div class="pbtns">${v.q.options.map((o,i) => `<button class="pbtn o${i} ${v.my === i ? "mine" : ""}" data-act="answer" data-v="${i}" ${locked ? "disabled" : ""}><span class="k">${"ABCD"[i]}</span><span>${esc(o)}</span></button>`).join("")}</div>`}
+      ${locked ? `<p class="hint" style="text-align:center">Locked in. Waiting for everyone else&hellip;</p>` : ""}
+    </div>`;
+  } else if (v.phase === "reveal" && v.result){
+    const r = v.result;
+    body = `<div class="pcard">
+      <p class="verdict ${r.correct ? "good" : "bad"}">${r.correct ? `+${r.pts}` : v.my == null ? "Too slow" : "Wrong"}</p>
+      ${v.mode === "typed" && v.my != null ? `<p class="mine-text">You said <q>${esc(v.my)}</q></p>` : ""}
+      <p class="pq">${r.correct ? (v.mode === "typed" ? `Answer: <b style="color:var(--mint)">${esc(r.answer)}</b>` : "Nice one.") : `The answer was <b style="color:var(--mint)">${esc(r.answer)}</b>.`}</p>
+      ${!r.correct && v.drinks ? `<div class="sipcall">Take a sip.</div>` : ""}
+      ${stats}<p class="hint">Next question coming up&hellip;</p></div>`;
+  } else if (v.phase === "final"){
+    body = `<div class="pcard"><p class="eyebrow">Final result</p><h2>You came ${ordinal(v.rank)}</h2>${stats}
+      <ol class="board" style="text-align:left">${(v.top || []).map((x,i) => `<li><span class="pos">${i+1}</span><span class="nm">${esc(x.name)}</span><span class="sc">${x.score}</span></li>`).join("")}</ol>
+      <p class="hint">Stay here if the host starts another game.</p></div>`;
+  }
+  const old = $("#ans"), draft = old ? old.value : "", focused = old && document.activeElement === old;
+  app.innerHTML = `<div class="phone">${banner}${body}</div>`;
+  const ans = $("#ans");
+  if (ans){ ans.value = draft; if (focused || !draft) ans.focus(); }
+  if (v.phase === "question" && v.remaining != null) paintTimer(P.deadline - Date.now(), v.timer * 1000);
+}
+
+/* =================== EVENTS =================== */
+const toggle = (arr, v) => arr.includes(v) ? arr.filter(x => x !== v) : [...arr, v];
+const actions = {
+  join: () => playerJoin($("#code").value, $("#name").value),
+  host: () => hostCreate(false),
+  resumeHost: () => { H = store.get("lastcall-live-host"); hostCreate(true); },
+  retryHost: () => { H.status = "connecting"; openHostPeer(3); render(); },
+  leave: () => { if (role === "host"){ store.del("lastcall-live-host"); } leave(); },
+  count: ({v}) => { H.settings.count = +v; saveHost(); render(); },
+  timer: ({v}) => { H.settings.timer = +v; saveHost(); render(); },
+  diff: ({v}) => { H.settings.diff = v; saveHost(); render(); },
+  mode: ({v}) => { H.settings.mode = v; saveHost(); render(); },
+  judge: ({pid}) => judge(pid),
+  drinks: ({v}) => { H.settings.drinks = v === "true"; saveHost(); render(); },
+  cat: ({v}) => { H.settings.cats = toggle(H.settings.cats, v); saveHost(); render(); },
+  allCats: () => { H.settings.cats = Object.keys(CATS); saveHost(); render(); },
+  noCats: () => { H.settings.cats = []; saveHost(); render(); },
+  start: () => hostStart(),
+  reveal: () => reveal(),
+  next: () => hostNext(),
+  again: () => hostToLobby(),
+  endGame: () => { if (confirmEnd){ confirmEnd = false; stopTick(); H.phase = "final"; saveHost(); broadcast(); } else confirmEnd = true; render(); },
+  answer: ({v}) => playerAnswer(+v)
+};
+document.addEventListener("click", e => {
+  const el = e.target.closest("[data-act]");
+  if (!el || el.disabled) return;
+  if (el.dataset.act !== "endGame") confirmEnd = false;
+  actions[el.dataset.act]?.(el.dataset);
+});
+document.addEventListener("submit", e => {
+  if (e.target.matches('[data-form="typed"]')){ e.preventDefault(); playerSendText($("#ans").value); }
+});
+document.addEventListener("keydown", e => {
+  if (e.key === "Enter" && !role && e.target.matches("#code,#name")) actions.join();
+  if (role === "player" && P?.view?.phase === "question" && P.view.mode !== "typed" && !e.target.matches("input")){
+    const i = "abcd".indexOf(e.key.toLowerCase()); if (i >= 0) playerAnswer(i);
+  }
+});
+window.addEventListener("beforeunload", e => { if (role === "host" && H.phase !== "lobby" && H.phase !== "final"){ e.preventDefault(); e.returnValue = ""; } });
+
+render();
+</script>
+</body>
+</html>
