@@ -165,7 +165,7 @@ select.input{font-size:15px;padding:8px 10px}
 <body>
 <div class="wrap">
   <header class="bar">
-    <div class="brand">Last Call Live <small id="where"></small></div>
+    <div class="brand">Last Call Live <small id="ver">v3</small> <small id="where"></small></div>
     <div class="bar-actions" id="barActions"></div>
   </header>
   <main id="app"></main>
@@ -969,6 +969,7 @@ const CATS = {
 };
 const DIFF = {e:{label:"Easy", base:100}, m:{label:"Medium", base:200}, h:{label:"Hard", base:300}};
 // Messages travel through a public MQTT broker over secure websockets, so any phone on any network can reach the host.
+const VERSION = 3;
 const TOPIC = "lastcall-live/v2/";
 const BROKERS = ["wss://broker.emqx.io:8084/mqtt", "wss://broker.hivemq.com:8884/mqtt"];
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ";
@@ -1370,7 +1371,7 @@ function render(){
 
 function joinUrl(){
   if (!/^https?:$/.test(location.protocol)) return "";
-  return location.href.split("#")[0] + "#" + H.code;
+  return location.origin + location.pathname + "?v=" + VERSION + "#" + H.code;
 }
 
 function renderHost(app, where, acts){
@@ -1474,7 +1475,7 @@ function renderPlayer(app, where, acts){
   if (P.status === "lost") banner = `<div class="banner bad">Connection dropped. Reconnecting&hellip;</div>`;
   else if (P.ever && P.hostOnline === false) banner = `<div class="banner bad">The host's screen went offline. Waiting for it to come back&hellip;</div>`;
   if (P.status === "notfound"){
-    app.innerHTML = `<div class="phone"><div class="pcard"><h2>No game found</h2><p class="hint">There's no open room with code <b>${esc(P.code)}</b>. Check the code on the host's screen and try again.</p><button class="btn big" data-act="leave">Back</button></div></div>`;
+    app.innerHTML = `<div class="phone"><div class="pcard"><h2>Looking for room ${esc(P.code)}&hellip;</h2><p class="hint">No open room with that code yet. Check the code on the host's screen. This page keeps looking and joins as soon as the room opens.</p><button class="btn ghost big" data-act="leave">Change code</button></div></div>`;
     return;
   }
   if (P.status === "error"){
